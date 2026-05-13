@@ -1,0 +1,95 @@
+// MackreeAI render worker — Express server that wraps FFmpeg.
+// Receives signed render requests from the Vercel app, pulls assets from
+// Supabase Storage, runs the pipeline, uploads the output, and posts back.
+
+import express from 'express'
+import morgan from 'morgan'
+import { rm, mkdir } from 'node:fs/promises'
+import path from 'node:path'
+import { downloadJobAssets, uploadOutput, readJobManifest } from './lib/storage.js'
+import { renderJob } from './lib/render.js'
+import { postCallback } from './lib/callback.js'
+
+const PORT = parseInt(process.env.PORT ?? '8080', 10)
+const WORKER_SECRET = process.env.WORKER_SECRET
+const WORKDIR_ROOT = process.env.RENDER_WORKDIR ?? '/tmp/render-jobs'
+const OPENAI_KEY = process.env.OPENAI_API_KEY ?? ''
+
+if (!WORKER_SECRET) {
+  console.error('FATAL: WORKER_SECRET is required')
+  process.exit(1)
+}
+
+const app = express()
+app.use(express.json({ limit: '1mb' }))
+app.use(morgan('combined'))
+
+// Health probe for Easypanel
+app.get('/health', (_req, res) => {
+  res.json({ ok: true, ts: new Date().toISOString() })
+})
+
+// Bearer-auth guard for /render
+function requireBearer(req, res, next) {
+  const header = req.headers.authorization ?? ''
+  const token = header.startsWith('Bearer ') ? header.slice(7) : ''
+  if (token !== WORKER_SECRET) {
+    return res.status(401).json({ error: 'unauthorized' })
+  }
+  next()
+}
+
+/**
+ * POST /render
+ * Body: { jobId: string, userId: string }
+ * The worker responds 202 immediately, then runs the render in the
+ * background and notifies the Vercel app via the configured CALLBACK_URL.
+ */
+app.post('/render', requireBearer, async (req, res) => {
+  const { jobId, userId } = req.body ?? {}
+  if (!jobId || !userId) {
+    return res.status(400).json({ error: 'jobId and userId required' })
+  }
+
+  // Ack right away — render happens async so HTTP doesn't time out.
+  res.status(202).json({ accepted: true, jobId })
+
+  const workDir = path.join(WORKDIR_ROOT, jobId)
+  try {
+    await mkdir(workDir, { recursive: true })
+    console.log(`[render] start jobId=${jobId} userId=${userId}`)
+
+    await downloadJobAssets(userId, jobId, workDir)
+    const manifest = await readJobManifest(workDir)
+    console.log(`[render] manifest:`, JSON.stringify(manifest).slice(0, 200))
+
+    const outputPath = await renderJob({ workDir, openaiKey: OPENAI_KEY })
+    const publicUrl = await uploadOutput(userId, jobId, outputPath, 'output.mp4')
+
+    await postCallback({
+      jobId,
+      userId,
+      status: 'done',
+      videoUrl: publicUrl,
+    })
+    console.log(`[render] done jobId=${jobId} url=${publicUrl}`)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[render] fail jobId=${jobId}:`, msg)
+    await postCallback({
+      jobId,
+      userId,
+      status: 'failed',
+      error: msg.slice(0, 500),
+    })
+  } finally {
+    // Clean tmpfs regardless of outcome — output is already in Supabase
+    rm(workDir, { recursive: true, force: true }).catch(() => {})
+  }
+})
+
+app.use((_req, res) => res.status(404).json({ error: 'not found' }))
+
+app.listen(PORT, () => {
+  console.log(`MackreeAI worker listening on :${PORT}`)
+})
