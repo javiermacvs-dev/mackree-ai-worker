@@ -63,7 +63,7 @@ app.post('/render', requireBearer, async (req, res) => {
     const manifest = await readJobManifest(workDir)
     console.log(`[render] manifest:`, JSON.stringify(manifest).slice(0, 200))
 
-    const outputPath = await renderJob({ workDir, openaiKey: OPENAI_KEY })
+    const outputPath = await renderJob({ workDir, openaiKey: OPENAI_KEY, manifest })
     const publicUrl = await uploadOutput(userId, jobId, outputPath, 'output.mp4')
 
     await postCallback({
