@@ -25,7 +25,7 @@ app.use(express.json({ limit: '1mb' }))
 app.use(morgan('combined'))
 
 // Health probe for Easypanel — `version` lets us confirm a new deploy is live.
-const BUILD_VERSION = 'edit-mode-v2-audio-aformat'
+const BUILD_VERSION = 'edit-mode-v2-stderr-capture'
 app.get('/health', (_req, res) => {
   res.json({ ok: true, version: BUILD_VERSION, ts: new Date().toISOString() })
 })
@@ -76,12 +76,16 @@ app.post('/render', requireBearer, async (req, res) => {
     console.log(`[render] done jobId=${jobId} url=${publicUrl}`)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error(`[render] fail jobId=${jobId}:`, msg)
+    const stderr = err?.stderr ? String(err.stderr).slice(-3000) : ''
+    const stdout = err?.stdout ? String(err.stdout).slice(-1500) : ''
+    console.error(`[render] fail jobId=${jobId}: ${msg}`)
+    if (stderr) console.error(`[render] stderr (tail):\n${stderr}`)
+    if (stdout) console.error(`[render] stdout (tail):\n${stdout}`)
     await postCallback({
       jobId,
       userId,
       status: 'failed',
-      error: msg.slice(0, 500),
+      error: (msg + (stderr ? ' | stderr: ' + stderr.slice(-400) : '')).slice(0, 1500),
     })
   } finally {
     // Clean tmpfs regardless of outcome — output is already in Supabase
