@@ -6,9 +6,13 @@ import express from 'express'
 import morgan from 'morgan'
 import { rm, mkdir } from 'node:fs/promises'
 import path from 'node:path'
-import { downloadJobAssets, uploadOutput, readJobManifest } from './lib/storage.js'
+import { downloadJobAssets, uploadOutput, uploadThumbnail, readJobManifest } from './lib/storage.js'
 import { renderJob } from './lib/render.js'
 import { postCallback } from './lib/callback.js'
+import { exec } from 'node:child_process'
+import { promisify } from 'node:util'
+
+const execAsync = promisify(exec)
 
 const PORT = parseInt(process.env.PORT ?? '8080', 10)
 const WORKER_SECRET = process.env.WORKER_SECRET
@@ -25,7 +29,7 @@ app.use(express.json({ limit: '1mb' }))
 app.use(morgan('combined'))
 
 // Health probe for Easypanel — `version` lets us confirm a new deploy is live.
-const BUILD_VERSION = 'v15-clip-bridge-deterministic'
+const BUILD_VERSION = 'v16-thumbnails'
 app.get('/health', (_req, res) => {
   res.json({ ok: true, version: BUILD_VERSION, ts: new Date().toISOString() })
 })
@@ -67,11 +71,27 @@ app.post('/render', requireBearer, async (req, res) => {
     const outputPath = await renderJob({ workDir, openaiKey: OPENAI_KEY, manifest })
     const publicUrl = await uploadOutput(userId, jobId, outputPath, 'output.mp4')
 
+    // Thumbnail: extraer frame en t=1.5s (después del intro del clip).
+    // No bloquea si falla — el render principal ya es exitoso.
+    let thumbUrl = null
+    try {
+      const thumbPath = `${workDir}/thumbnail.jpg`
+      await execAsync(
+        `ffmpeg -y -ss 1.5 -i "${outputPath}" -vframes 1 -vf "scale=540:-2" -q:v 4 "${thumbPath}"`,
+        { timeout: 30_000 },
+      )
+      thumbUrl = await uploadThumbnail(userId, jobId, thumbPath)
+      console.log(`[render] thumbnail uploaded: ${thumbUrl}`)
+    } catch (thumbErr) {
+      console.warn(`[render] thumbnail failed (non-blocking):`, thumbErr?.message ?? thumbErr)
+    }
+
     await postCallback({
       jobId,
       userId,
       status: 'done',
       videoUrl: publicUrl,
+      thumbnailUrl: thumbUrl,
     })
     console.log(`[render] done jobId=${jobId} url=${publicUrl}`)
   } catch (err) {
