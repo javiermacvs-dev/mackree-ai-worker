@@ -107,7 +107,63 @@ Captura cuando Whisper colapsa "Eeeeeh" a "e" (1 char) o "eh" (2 chars) pero la 
 
 **Resultado esperado:** la palabra-puente debe aparecer **una sola vez** en el video final. Si aparece dos veces = bug del detector (NO de la regla).
 
-### 4. Silence cuts — **v26 WORD-GAP based INAMOVIBLE (reemplaza silencedetect dB-based)**
+### 4. Silence cuts — **v27 WORD-GAP FORMULA APROBADA POR JAVIER (INAMOVIBLE FINAL)**
+
+## 🔒 FÓRMULA EXACTA APROBADA — NO MODIFICAR JAMÁS
+
+**Render que la validó:** `b311f719-816a-43ef-9528-a400732802e6` (2026-05-19 03:10-03:16 UTC)
+**Veredicto Javier:** "ME GUSTÓ, ME FASCINÓ, APROBADO. Replicar esta fórmula para siempre"
+
+**Configuración EXACTA en `lib/render.js` `applyContentTrim`:**
+```javascript
+const rawDur = await getMediaDuration(rawPath)
+const gaps = detectWordGaps(words, {
+  minGapSec: 0.30,        // gaps mid-speech mínimos a cortar
+  padding: 0.10,          // aire a cada lado del corte (preserva respiración)
+  minInitGapSec: 0.40,    // corta silencio INICIAL si > 0.40s
+  minEndGapSec: 0.40,     // corta silencio FINAL si > 0.40s
+  introGuardSec: 0.30,    // mini guard interno (no aplica a init cut)
+  outroGuardSec: 0.30,    // mini guard interno (no aplica a end cut)
+  totalDur: rawDur,
+})
+```
+
+**Resultado validado en `b311f719`:**
+- Original: 67.43s
+- Final: **49.90s** (17.53s recortados, 26% más punchy)
+- Cortes: 15 = `gap_init: 1` + `gap: 10` (mid) + `gap_end: 1` + `prolonged: 3`
+- `silence_removed_sec`: 0 (capa dB pre-Whisper sigue activa pero NO contribuye en este caso — el word-gap hace todo el trabajo)
+
+**🔒 Bloqueo permanente:**
+
+Esta fórmula es **INAMOVIBLE PERMANENTE** por instrucción explícita de Javier ("replicá esa fórmula para siempre"). Cualquier sesión futura que:
+- Cambie `minGapSec` (0.30s)
+- Cambie `padding` (0.10s)
+- Cambie `minInitGapSec` o `minEndGapSec` (0.40s)
+- Cambie `introGuardSec` o `outroGuardSec` (0.30s)
+- Elimine la llamada a `detectWordGaps` en `applyContentTrim`
+- Vuelva al approach `silencedetect` dB-based (descartado en v25)
+
+→ **DEBE PARAR Y CONSULTAR A JAVIER** antes de hacer el cambio. No es opcional. La fórmula está validada con render real y aprobada.
+
+**Razón histórica completa** (en caso de duda):
+
+| Versión | Approach | Resultado real |
+|---|---|---|
+| v8-v23 | `silencedetect` dB con varios umbrales | Funcionaba en algunos clips, fallaba en otros |
+| v24 | dB 0.55/-32/0.12 (suavizado) | `silence_removed: 0` en clip Javier ❌ |
+| v25 | dB 0.30/-25/0.05 (mega-agresivo) | `silence_removed: 0` IGUAL ❌ (ambient noise mata dB) |
+| v26 | Whisper word-gaps > 0.4s, sin init/end | 9 cortes, 13.92s removidos. Mejora pero **faltaba init** |
+| **v27** | **Whisper word-gaps > 0.30s + init + end** | **15 cortes, 17.61s removidos. APROBADO** ✅ |
+
+**Fuentes técnicas que avalan la decisión:**
+- [Rendi.dev FFmpeg API — silence detection](https://docs.rendi.dev/silence-detection-removal)
+- [Descript blog — silence remover best practices](https://www.descript.com/blog/article/best-silence-remover-tools)
+- Industria: Reels/high-energy usa 0.3-0.5s threshold, podcasts 0.8-1.0s
+
+---
+
+### 4b. Por qué dB-based falla y word-gap SÍ funciona (referencia técnica)
 
 **Por qué cambiamos de dB-based a word-gap based (2026-05-19 madrugada):**
 
@@ -182,11 +238,14 @@ trimSilences(item.filePath, workDir, label, {
 
 **Regla operativa INAMOVIBLE:** **NO suavizar estos valores** salvo pedido explícito de Javier nombrando el caso de uso específico (ej. "para Mac Gyver tutoriales largos quiero 0.5s en lugar de 0.3s"). Default v25 es Reels/high-energy. Si llegan otros tipos de cliente, agregar un parametro `manifest.contentType: 'reel' | 'tutorial' | 'podcast'` y switchear umbrales — NO modificar default.
 
-### 5. Voz y música — reglas del editor de video manual aplican acá también
+### 5. Voz y música — INAMOVIBLE (v28 valores aprobados)
 
 - **Voz protagonista:** `volume=1.3 + alimiter=limit=0.95` (regla #2 del editor manual, validada).
-- **Música según tipo:** commercial=0.06, personal=0.12 (regla #3 — cableada en `render.js` línea ~696: `musicVol = isCommercial ? 0.06 : 0.12`).
-- **No cambiar estos valores** salvo pedido explícito.
+- **Música según tipo (v28 INAMOVIBLE, Javier 2026-05-19 03:25 UTC "un poquito más volumen"):**
+  - **commercial: `0.10`** (antes 0.06, subido un punto)
+  - **personal: `0.14`** (antes 0.12, subido proporcional)
+- Cableado en `render.js` línea ~739: `musicVol = isCommercial ? 0.10 : 0.14`
+- **NO bajar de estos valores** sin pedido explícito. Si Javier pide más volumen otra vez, solo subir (ej. 0.12 / 0.16).
 
 ### 6. Logo top-right — siempre visible si el manifest lo trae, tamaño 240px INAMOVIBLE
 
