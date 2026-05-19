@@ -61,7 +61,54 @@ Captura cuando Whisper colapsa "Eeeeeh" a "e" (1 char) o "eh" (2 chars) pero la 
 
 **Resultado esperado:** la palabra-puente debe aparecer **una sola vez** en el video final. Si aparece dos veces = bug del detector (NO de la regla).
 
-### 4. Silence trim — MEGA-AGRESIVO INAMOVIBLE (v25, calibrado contra fuentes expertas)
+### 4. Silence cuts — **v26 WORD-GAP based INAMOVIBLE (reemplaza silencedetect dB-based)**
+
+**Por qué cambiamos de dB-based a word-gap based (2026-05-19 madrugada):**
+
+Tras 2 renders consecutivos (v24 con 0.55/-32/0.12, v25 con 0.30/-25/0.05), ambos reportaron `silence_removed_sec: 0` aunque Javier confirmó AUDIBLEMENTE que hay silencios largos. Causa raíz: clips de cámara/celular tienen ambient noise (rumble, AC, viento) tan alto que NINGÚN umbral dB razonable los clasifica como silencio. Si subiéramos a `-20` o `-15 dB`, empezaría a cortar partes de voz suave. El approach dB-based es estructuralmente insuficiente para clips reales.
+
+**Solución v26 (INAMOVIBLE):** usar timestamps word-level de Whisper para detectar pausas semánticas.
+
+**Cómo funciona** (`lib/wordGaps.js`):
+- Whisper ya transcribe word-by-word con `start`/`end` por palabra
+- Entre cada par de palabras consecutivas: `gap = word[i+1].start - word[i].end`
+- Si `gap > 0.4s` → pausa real (no depende del ruido ambiente)
+- Cortar con padding 0.10s a cada lado (preserva respiración inmediata)
+- Intro guard 2.5s (preserva saludo/apertura) + outro guard 1.5s (preserva cierre)
+
+**Integrado en `applyContentTrim`** junto a las otras 3 detecciones (filler dictionary + clip-bridge + LLM false-starts). Todo se mergea en `allRanges` y se corta de una vez.
+
+**Por qué SÍ funciona donde dB falla:**
+- Whisper sabe DÓNDE hay palabras (semántica) — no le importa el ruido de fondo
+- Si Javier se queda callado pensando → NO hay palabras → gap detectado → cortar
+- Si la cámara tiene rumble de fondo todo el tiempo → Whisper lo ignora (no es palabra), gap igual se detecta
+
+**Valores INAMOVIBLES v26:**
+```javascript
+detectWordGaps(words, {
+  minGapSec: 0.4,        // cualquier gap > 0.4s entre palabras = pausa real
+  padding: 0.10,         // deja 0.10s de aire a cada lado del corte
+  introGuardSec: 2.5,    // NO cortar gaps que terminen antes de 2.5s
+  outroGuardSec: 1.5,    // NO cortar gaps que empiecen después de totalDur-1.5s
+})
+```
+
+**Trayectoria histórica del silence trim:**
+| Versión | Approach | Resultado |
+|---|---|---|
+| v8 | `silencedetect` dB 0.80/-30 | Inicial conservador |
+| v14 | `silencedetect` dB 0.35/-28 (super-agresivo) | Funcionó en algunos clips |
+| v24 | `silencedetect` dB 0.55/-32 (suavizado) | `silence_removed_sec: 0` en clip real |
+| v25 | `silencedetect` dB 0.30/-25 (mega-agresivo) | `silence_removed_sec: 0` IGUAL (ambient noise mata) |
+| **v26** | **Whisper word-gaps > 0.4s** | **INAMOVIBLE — funciona con ambient noise** |
+
+**Nota:** el `trimSilences` per-clip ANTES de Whisper sigue activo (cortes baseline dB con umbrales v25 mega-agresivo 0.30/-25/0.05). Sirve como primera capa para clips MUY ruidosos donde igual hay tramos quietos detectables. Pero el corte REAL viene de `wordGaps` después de Whisper. **Doble protección.**
+
+**Regla operativa INAMOVIBLE:** NO volver al approach dB puro. Si en el futuro alguien quiere "subir agresividad", el dial es `minGapSec` (bajar a 0.30s = más agresivo, subir a 0.55s = más conservador) o `padding` (bajar a 0.05s = más punchy). NO tocar los thresholds dB del trimSilences pre-Whisper.
+
+---
+
+### 4b. Silence trim PER-CLIP pre-Whisper — capa baseline (v25 valores se mantienen)
 
 **Valores INAMOVIBLES 2026-05-19 v25** en `lib/render.js` (sección `wantSilenceTrim` ~línea 598):
 ```javascript
