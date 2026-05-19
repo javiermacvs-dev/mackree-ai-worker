@@ -1,0 +1,67 @@
+{
+  "categories": {
+    "whoosh": [
+      "djartmusic-christmas-sparkle-whoosh_1-275404.mp3",
+      "dragon-studio-clean-whoosh-382726.mp3",
+      "dragon-studio-simple-whoosh-382724.mp3",
+      "dragon-studio-whoosh-cinematic-376875.mp3",
+      "dragon-studio-whoosh-cinematic-5-376880.mp3",
+      "dragon-studio-whoosh-cinematic-sound-effect-376889.mp3",
+      "lordsonny-long-whoosh-194554.mp3",
+      "rescopicsound-cinematic-designed-sci-fi-whoosh-transition-nexawave-228295 (1).mp3",
+      "soundreality-whoosh-bamboo-389752.mp3",
+      "soundreality-whoosh-dark-tension-386134.mp3",
+      "soundreality-whoosh-end-384629.mp3"
+    ],
+    "ding": [
+      "alexis_gaming_cam-ding-cartoon-346093.mp3",
+      "dragon-studio-ding-402325.mp3",
+      "freesound_community-ding-101492.mp3",
+      "freesound_community-success_bell-6776.mp3"
+    ],
+    "swoosh": [
+      "makoto-ae-swoosh-3-359830.mp3",
+      "universfield-swoosh-014-383768.mp3",
+      "universfield-swoosh-06-351021.mp3",
+      "universfield-swoosh-07-351043.mp3"
+    ],
+    "boom": [
+      "bithuh-vine-boom-392646.mp3",
+      "dragon-studio-cinematic-boom-01-414572.mp3",
+      "dragon-studio-suspenseful-boom-451863.mp3",
+      "soundreality-riser-wildfire-285209.mp3",
+      "submority-boom-geomorphism-cinematic-trailer-sound-effects-123876.mp3",
+      "universfield-impact-cinematic-boom-352465.mp3"
+    ],
+    "pop": [
+      "creatorshome-sharp-pop-328170.mp3",
+      "dragon-studio-pop-402322.mp3",
+      "dragon-studio-pop-402324.mp3",
+      "soundreality-battle-pop-424581.mp3",
+      "soundreality-pop-423717.mp3",
+      "soundreality-pop-sound-423716.mp3"
+    ],
+    "sparkle": [
+      "benkirb-shine-11-268907.mp3",
+      "freesound_community-cartoon_wink_magic_sparkle-6896.mp3",
+      "liecio-magic-sparkle-190030.mp3",
+      "scratchonix-glitter-sparkle-423283.mp3",
+      "shidenbeatsmusic-sound-effect-twinklesparkle-115095.mp3"
+    ],
+    "click": [
+      "master_of_dreams_mouse_wheel_scrolling_1_485.mp3",
+      "master_of_dreams_single_mouse_click_1_687.mp3",
+      "master_of_dreams_six_mouse_click_689.mp3",
+      "zapsplat_technology_computer_mouse_plastic_apple_click_004_102768.mp3"
+    ]
+  },
+  "hints": {
+    "whoosh": "Transición rápida entre clips, corte de escena, cambio de tema",
+    "ding": "Énfasis en palabra clave, número, beneficio, dato importante",
+    "swoosh": "Zoom in/out, aparición de elemento, movimiento de cámara",
+    "boom": "Impacto fuerte, reveal final, anuncio dramático, riser de tensión",
+    "pop": "Aparición de texto/imagen en pantalla, micro-interacción visual",
+    "sparkle": "Destello, momento mágico/wow, brillo de marca",
+    "click": "UI/click sutil — usar con moderación, puede sonar tech"
+  }
+}
