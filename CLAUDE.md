@@ -61,18 +61,33 @@ Captura cuando Whisper colapsa "Eeeeeh" a "e" (1 char) o "eh" (2 chars) pero la 
 
 **Resultado esperado:** la palabra-puente debe aparecer **una sola vez** en el video final. Si aparece dos veces = bug del detector (NO de la regla).
 
-### 4. Silence trim — valores actuales (suavizado "10 → 7", 2026-05-18)
+### 4. Silence trim — MEGA-AGRESIVO INAMOVIBLE (v25, calibrado contra fuentes expertas)
 
-**Valores actuales** en `lib/render.js` (sección `wantSilenceTrim` ~línea 598):
+**Valores INAMOVIBLES 2026-05-19 v25** en `lib/render.js` (sección `wantSilenceTrim` ~línea 598):
 ```javascript
 trimSilences(item.filePath, workDir, label, {
-  minSilenceDur: 0.55,   // antes 0.35 ("super agresivo v14")
-  noiseDb: -32,           // antes -28
-  padding: 0.12,          // antes 0.05
+  minSilenceDur: 0.30,   // cualquier pausa > 0.3s se corta (Reels/high-energy)
+  noiseDb: -25,           // captura silencios 'ruidosos' (rumble cámara, fan, etc.)
+  padding: 0.05,          // corte casi sin aire, ritmo punchy
 })
 ```
 
-**Cómo interpretar la escala "10 → 7":** 10 = super-agresivo (0.35/-28/0.05). 7 = balance actual (0.55/-32/0.12). 5 = más suave (0.7/-35/0.15). 0 = sin recorte de silencios. Si Javier pide subir o bajar, mover los 3 dials proporcionalmente.
+**Trayectoria histórica:**
+| Versión | minSilenceDur | noiseDb | padding | Resultado |
+|---|---|---|---|---|
+| v8 | 0.80 | -30 | 0.10 | Inicial conservador |
+| v14 | 0.35 | -28 | 0.05 | "Super agresivo" |
+| v24 | 0.55 | -32 | 0.12 | Suavizado por pedido Javier ("10→7") |
+| **v25** | **0.30** | **-25** | **0.05** | **MEGA-AGRESIVO basado en fuentes expertas (Rendi + Descript)** |
+
+**Por qué v24 falló** (Javier 2026-05-19 madrugada): render real reportó `silence_removed_sec: 0` con clip que TENÍA silencios audibles. Causa: `-32 dB` es umbral de podcast (ambiente muy quieto); en Reels con cámara real hay rumble continuo que supera -32 dB y por eso "nada califica como silencio". Subir a `-25 dB` captura los silencios "ruidosos" reales.
+
+**Fuentes expertas consultadas:**
+- [Rendi.dev FFmpeg Silence Detection API](https://docs.rendi.dev/silence-detection-removal): para speech `noise=-25 dB`, `d=0.3s`
+- [Descript Silence Remover docs](https://www.descript.com/tools/silence-remover): high-energy YouTube/Reels usa thresholds 0.3-0.5s
+- Tabla por tipo de contenido: Reels=0.3s · Educational=0.5-0.8s · Podcast=0.8-1.0s · Tutorial=preservar pausas
+
+**Regla operativa INAMOVIBLE:** **NO suavizar estos valores** salvo pedido explícito de Javier nombrando el caso de uso específico (ej. "para Mac Gyver tutoriales largos quiero 0.5s en lugar de 0.3s"). Default v25 es Reels/high-energy. Si llegan otros tipos de cliente, agregar un parametro `manifest.contentType: 'reel' | 'tutorial' | 'podcast'` y switchear umbrales — NO modificar default.
 
 ### 5. Voz y música — reglas del editor de video manual aplican acá también
 
