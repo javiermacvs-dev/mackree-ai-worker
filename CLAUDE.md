@@ -6,6 +6,52 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## 🧠 FILOSOFÍA DEL PRODUCTO — INAMOVIBLE (Javier 2026-05-19)
+
+**Regla cero del producto MackreeAI:**
+
+> **TODO lo técnico / de calidad / de edición profesional = INAMOVIBLE EN BACKEND. El cliente NO tiene toggle, NO ve la opción, NO puede desactivarlo. Se aplica automático a TODO render.**
+>
+> **Solo lo que es PREFERENCIA ESTÉTICA PERSONAL queda como elección del cliente** (música, empresa, descripción del video — porque son su gusto / contenido, no calidad técnica).
+
+**Implicancia técnica:** las reglas técnicas viven en el código del worker (este repo) como hard-coded values. NUNCA como flags del `manifest` opt-in/opt-out. Si un cliente quiere desactivar algo técnico (ej. "no quiero captions") → la respuesta es "usá otra app". Es regla de marca del producto, no preferencia.
+
+**Lista actualizada al 2026-05-19 madrugada (v26):**
+
+### INAMOVIBLES (cliente NO ve, siempre on)
+1. Reducción ruido audio (`afftdn=nr=50 + highpass=100`) — v20+
+2. Normalización dinámica `dynaudnorm` — v20+
+3. Loudnorm EBU R128 + alimiter voz protagonista — v20+
+4. Silence trim per-clip pre-Whisper (`0.30/-25/0.05`) — v25
+5. **Word-gap cuts via Whisper (gaps > 0.4s)** — v26 (reemplaza dB para clips ruidosos)
+6. Muletillas diccionario ES/EN (eh/uhm/este/etc.) — v20+
+7. Vocales prolongadas ("Eeeeeh", "Iiiii") con thresholds 0.4/0.5/0.6s — v20 INAMOVIBLE específico
+8. Trabazones `isStutter` ("m-mucho", "es-estamos") — v20+
+9. Clip-bridge repetitions (palabras repetidas entre clips) — v20 INAMOVIBLE específico
+10. LLM false-starts/retakes (Claude Sonnet detecta tomas falsas) — v20+
+11. **Captions ASS karaoke** (toggle removido del SaaS) — v24
+12. **Logo top-right 240px** — v24
+13. Imágenes IA fullscreen 3s (Claude Haiku + nano-banana) — v22+
+14. Estabilización deshake + unsharp + color eq — v4+
+
+### Cliente ELIGE (preferencia estética)
+- **Música** (12 géneros o "Sin música") — su gusto
+- **Empresa** (cuando haya multi-empresa Creator/Pro) — qué brand usar
+- **Descripción del video** (es su INPUT, no técnico)
+
+### Próxima inamovible (sesión SFX)
+- **SFX sincronizados** (whoosh/ding/boom/etc. en momentos clave del transcript) — LLM decide cuándo, cliente no ve la opción
+
+**REGLA OPERATIVA INAMOVIBLE para sesiones futuras:**
+
+Cuando Javier pida un cambio nuevo, preguntate: **¿es técnico/calidad o estético/preferencia?**
+- Técnico/calidad → **INAMOVIBLE backend.** Agregalo al código del worker hard-coded. NO crear toggle en el SaaS. Documentarlo acá como inamovible.
+- Estético/preferencia → **opción en el SaaS** (dropdown/toggle/input). Worker recibe el valor en el `manifest`.
+
+Si dudás → asumí técnico/inamovible. Es más fácil agregar toggle después que quitarlo (cada toggle que se quita rompe UX de clientes existentes).
+
+---
+
 ## ⛔ DECISIONES INAMOVIBLES — protegidas entre sesiones
 
 > Estas decisiones **JAMÁS se reabren ni se revierten sin pedido explícito de Javier.** Si una nueva sesión de Claude está por modificar alguna de estas líneas → **DETENERSE y leer este archivo primero.** El problema operativo que motivó esta sección: en sesiones previas se perdieron ajustes aprobados al cerrar/abrir sesión, lo que provocó retrocesos (Javier: "hacemos 3 pasos adelante y volvemos 2, perdemos tiempo y crédito").
