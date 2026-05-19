@@ -29,8 +29,7 @@ app.use(express.json({ limit: '1mb' }))
 app.use(morgan('combined'))
 
 // Health probe for Easypanel — `version` lets us confirm a new deploy is live.
-// Force-rebuild marker 2026-05-18: contenedor quedó pegado en v19 tras reinicio manual.
-const BUILD_VERSION = 'v20-quieter-audio-softer-cuts'
+const BUILD_VERSION = 'v21-kie-music-auto'
 app.get('/health', (_req, res) => {
   res.json({ ok: true, version: BUILD_VERSION, ts: new Date().toISOString() })
 })
