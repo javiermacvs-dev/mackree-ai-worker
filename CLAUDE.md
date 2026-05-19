@@ -80,9 +80,23 @@ trimSilences(item.filePath, workDir, label, {
 - **Música según tipo:** commercial=0.06, personal=0.12 (regla #3 — cableada en `render.js` línea ~696: `musicVol = isCommercial ? 0.06 : 0.12`).
 - **No cambiar estos valores** salvo pedido explícito.
 
-### 6. Logo top-right — siempre visible si el manifest lo trae
+### 6. Logo top-right — siempre visible si el manifest lo trae, tamaño 240px INAMOVIBLE
 
-Cableado en `lib/render.js` ~líneas 717-725. `scale=140:-1` + `overlay=W-w-30:30`. Si Javier sube logo en su brand identity, debe aparecer. No quitar.
+Cableado en `lib/render.js` ~líneas 517 (renderCreate) y 752 (renderEdit). **`scale=240:-1`** + `overlay=W-w-30:30`. Si Javier sube logo en su brand identity, debe aparecer.
+
+**Trayectoria del tamaño del logo:**
+- v1-v23: `scale=140:-1` (~13% del frame 1080px). Javier dijo "muy chico".
+- **v24 (2026-05-19): `scale=240:-1` (~22% del frame)** — branding visible, comparable a watermarks de Reels comerciales.
+
+**NO bajar de 240px** salvo pedido explícito de Javier. Si en futuro pide más grande (280, 300), solo subir.
+
+### 7. Captions ASS karaoke — INAMOVIBLE siempre on
+
+Cableado en `lib/render.js` líneas 545 (renderCreate) y 778 (renderEdit). **`const wantCaptions = true`** (ignora `manifest.captions`).
+
+**Regla del producto (Javier 2026-05-19):** "es regla de marca del producto". Todo render lleva captions burned-in con ASS karaoke (Whisper word-level timestamps, color verde limón `#80FF00` con palabra activa). El cliente NO tiene toggle para desactivar.
+
+El toggle Captions fue **removido del dashboard SaaS** en commit del 2026-05-19 (ver `mackree-ai/`). El worker ya ignora el valor del manifest aunque el SaaS lo siga mandando por compat.
 
 ---
 
@@ -98,6 +112,23 @@ Cableado en `lib/render.js` ~líneas 717-725. `scale=140:-1` + `overlay=W-w-30:3
 
 5. **Asumir que el usuario disparó 2 renders cuando ve 2 rows en DB.** (Incidente 2026-05-18.) Si aparecen 2 jobs muy seguidos con mismo `user_id` pueden venir de retry automático del front-end o doble insert del handler — NO acusar al usuario sin evidencia. Investigar siempre la causa real.
 
+6. **Asumir que un push a GitHub = deploy live en Easypanel.** (Incidente 2026-05-18 ~21:15 UTC.) Los pasos GitHub-push → Easypanel-build → contenedor-restart **NO son atómicos**. Es posible que:
+   - El webhook de GitHub entregue OK (status 200) → ✅
+   - Easypanel compile la nueva imagen Docker exitosamente → ✅
+   - **Pero el contenedor activo NO se reinicie** y siga sirviendo la imagen vieja → ❌
+   
+   Síntoma: `/health` sigue reportando la `BUILD_VERSION` vieja indefinidamente. Confusión típica del operador (Javier): mira "Implementaciones" en Easypanel → ve OK verde → asume que v_nueva está live → dispara render → el render sale con v_vieja.
+   
+   **Confirmación 100% confiable de versión activa:**
+   ```bash
+   curl -sS https://worker-mackree-ai.kqlrkv.easypanel.host/health
+   # campo "version" = lo que realmente está corriendo
+   ```
+   
+   **Fix manual:** Easypanel → servicio worker → botón **"Reiniciar"** (↻) o "Detener" + "Iniciar". Eso fuerza pick-up de la imagen Docker más reciente.
+   
+   **Mejora futura:** después de cada push relevante, verificar `/health` reporte la `BUILD_VERSION` esperada antes de declarar deploy "completado". No confiar solo en el status del webhook ni en el indicador verde de Easypanel.
+
 ---
 
 ## Proceso obligatorio antes de tocar `render.js` o `fillerWords.js`
@@ -112,9 +143,41 @@ Cableado en `lib/render.js` ~líneas 717-725. `scale=140:-1` + `overlay=W-w-30:3
 
 ## Renders aprobados de referencia (no borrar)
 
-| Render | jobId | Cuándo | Qué quedó bien | Qué falta |
+| Render | jobId | Cuándo | Versión worker | Aprobación |
 |---|---|---|---|---|
-| 1 | `f1203785-20f8-4cf4-bac4-040cecffb28a` | 2026-05-18 20:47-20:57 UTC | Captions, corte de muletillas personales ("Eeeeeh", "Iiiii"), tiempo total 9:36 min | Ruido del audio aún alto (motivó `nr=35 → nr=50`); cortes silencios un poco agresivos (motivó 10 → 7) |
+| 1 | `f1203785-20f8-4cf4-bac4-040cecffb28a` | 2026-05-18 20:47-20:57 UTC (9:36 min) | `v19-perf-parallel-whisper` | Aprobado inicial. |
+| 2 | `e19068f1-ae91-40bf-a3ec-80454dc27fc1` | 2026-05-18 21:31-21:41 UTC (9:51 min) | `v19-perf-parallel-whisper` | Aprobado. |
+| 3 | `85e66fb3-cff6-4319-8acb-b32b81b724c9` | 2026-05-18 21:55-22:05 UTC (9:55 min) | `v19-perf-parallel-whisper` | "Me fascinó, aprobado" — Javier creía v20 pero contenedor seguía v19. |
+| 4 | `0ebeb265-3872-41b9-98fd-aa25e2b30901` | 2026-05-18 23:32-23:42 UTC (9:46 min) | **`v20-quieter-audio-softer-cuts`** ✅ | **APROBADO INAMOVIBLE** (Javier 23:46 UTC). Disparado por API directa al worker reutilizando assets del render #3. Trim stats idénticos a v19, diferencia audible en denoise audio. |
+| 5 | `f0c52034-b303-4639-a134-5e05c6bf1c97` | 2026-05-19 ~01:16 UTC | `v23-music-12-genres-pro-prompts` | Primer render con stack completo v23. `music:'none'` → Suno NO se ejecuta. Pass 3 imágenes IA SÍ se intenta. Disparado desde dashboard ya rediseñado con dropdowns. |
+
+**Estado al 2026-05-19 madrugada:** **v23 es el comportamiento LIVE del worker.** Incluye v20 (audio + cortes inamovibles) + v21 (música Suno V5 automática) + v22 (imágenes IA automáticas) + v23 (12 géneros de música con prompts pro).
+
+### Valores inamovibles del audio + cortes (v20, no cambiar)
+`afftdn=nr=50 + highpass=f=100`, silence-trim `0.55/-32/0.12`, diccionario muletillas expandido (vocales prolongadas + sin ambiguas como pues/nada/literalmente), `isSustainedSound` con `y`, `isProlongedShortWord` thresholds `0.4/0.5/0.6s` (sin tocar), `detectClipBridgeRepetitions` sin tocar. **NO retroceder.** Cualquier sesión futura que considere modificar estos valores requiere pedido explícito de Javier.
+
+### Nuevos módulos 2026-05-18 noche → 2026-05-19 madrugada
+
+| Módulo | Qué hace | Trigger |
+|---|---|---|
+| `lib/kie-music.js` | Genera música de fondo con Kie Suno V5 instrumental. 12 géneros con prompts pro: urban, acoustic, cinematic, latin, electronic, corporate, rock, lofi, epic, funk, pop. Polling cada 5s, timeout 5min. Fallback graceful sin música. | `manifest.music !== 'none'` + no hay `music.mp3` subido + `KIE_AI_API_KEY` presente |
+| `lib/kie-image.js` | Genera imágenes IA con Kie nano-banana-2 (Gemini 3.1 Flash, 4K, 9:16). `generateImagesForMomentsParallel` para batch. Polling cada 3s, timeout 2min/imagen. | Llamado por pass 3 (ver abajo) |
+| `lib/llm-moments.js` | Claude Haiku 4.5 analiza transcript word-level de Whisper y devuelve hasta 5 momentos clave + prompts visuales en inglés para nano-banana. ~$0.01/render. | Pass 3 |
+| Pass 3 nuevo en `lib/render.js` | Después del pass 2 (captions): detectar momentos LLM → generar N imágenes Kie en paralelo → overlay fullscreen 9:16 alpha=0.85 durante 3s con corte duro. Fallback graceful. | `style === 'commercial'` + `words.length > 0` + `ANTHROPIC_API_KEY` + `KIE_AI_API_KEY` + `manifest.aiImages !== 'off'` |
+
+### TODO arquitectural pendiente (multi-empresa)
+
+El trigger del pass 3 está hard-coded a `style === 'commercial'` por compat con el render aprobado v20. Pero el dashboard del SaaS ya NO muestra el toggle commercial/personal (commit `dac4f84` + fix build `210a8c7` 2026-05-19) — fue reemplazado por dropdown "Empresa" que carga `brand_identities` del user. Internamente el SaaS sigue mandando `style:'commercial'` siempre. **Cuando el backend del SaaS implemente multi-empresa real** (tier Creator/Pro = N brands por user, hoy solo 1), el trigger del worker debe cambiar a `Boolean(manifest.selectedCompany)` y el prompt del LLM debe incluir contexto de la empresa elegida (industria, brand colors, productos). Esto es trabajo del SaaS (mackree-ai/), no del worker.
+
+### Costo aproximado por render con todas las features
+
+| Pieza | Cost | Cuándo se ejecuta |
+|---|---|---|
+| FFmpeg base + Whisper + ASS captions | $0 (incluido en compute Easypanel) | Siempre |
+| Kie Suno V5 (música, ~3 min audio) | ~$0.05-0.10 | Si `music !== 'none'` |
+| Claude Haiku 4.5 (LLM moments) | ~$0.01 | Si `commercial + words` |
+| Kie nano-banana-2 ×5 imágenes | ~$0.20 ($0.04 c/u) | Si `commercial + words` |
+| **Total render con TODO activado** | **~$0.26-0.31** | — |
 
 ---
 
