@@ -179,6 +179,24 @@ El trigger del pass 3 está hard-coded a `style === 'commercial'` por compat con
 | Kie nano-banana-2 ×5 imágenes | ~$0.20 ($0.04 c/u) | Si `commercial + words` |
 | **Total render con TODO activado** | **~$0.26-0.31** | — |
 
+### Catálogo SFX (commit `2b21052`, 2026-05-19)
+
+40 SFX gratis de uso comercial (Pixabay + Freesound) organizados en `sfx/<categoria>/`:
+
+| Categoría | Cantidad | Uso típico |
+|---|---|---|
+| `whoosh/` | 11 | Transición rápida, corte de escena |
+| `ding/` | 4 | Énfasis en palabra clave, número, dato |
+| `swoosh/` | 4 | Zoom in/out, movimiento de cámara |
+| `boom/` | 6 | Impacto, reveal final, riser |
+| `pop/` | 6 | Aparición de texto/imagen |
+| `sparkle/` | 5 | Destello, momento wow |
+| `click/` | 4 | UI sutil (usar con moderación) |
+
+**Catálogo:** `sfx/catalog.json` con `{categories, hints}` para el LLM. Total 4.6 MB en Docker image (despreciable).
+
+**Estado:** archivos disponibles en el contenedor pero **NO integrados al render todavía**. Próxima sesión: `lib/llm-sfx.js` (LLM elige timestamps + categorías) + `amix` en pass 3 con SFX como inputs extra. Bump a v25 cuando se haga.
+
 ---
 
 ## Stack rápido
