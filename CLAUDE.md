@@ -238,14 +238,23 @@ trimSilences(item.filePath, workDir, label, {
 
 **Regla operativa INAMOVIBLE:** **NO suavizar estos valores** salvo pedido explícito de Javier nombrando el caso de uso específico (ej. "para Mac Gyver tutoriales largos quiero 0.5s en lugar de 0.3s"). Default v25 es Reels/high-energy. Si llegan otros tipos de cliente, agregar un parametro `manifest.contentType: 'reel' | 'tutorial' | 'podcast'` y switchear umbrales — NO modificar default.
 
-### 5. Voz y música — INAMOVIBLE (v28 valores aprobados)
+### 5. Voz y música — INAMOVIBLE (v29 valores aprobados)
 
 - **Voz protagonista:** `volume=1.3 + alimiter=limit=0.95` (regla #2 del editor manual, validada).
-- **Música según tipo (v28 INAMOVIBLE, Javier 2026-05-19 03:25 UTC "un poquito más volumen"):**
-  - **commercial: `0.10`** (antes 0.06, subido un punto)
-  - **personal: `0.14`** (antes 0.12, subido proporcional)
-- Cableado en `render.js` línea ~739: `musicVol = isCommercial ? 0.10 : 0.14`
-- **NO bajar de estos valores** sin pedido explícito. Si Javier pide más volumen otra vez, solo subir (ej. 0.12 / 0.16).
+- **Música según tipo (v29 INAMOVIBLE, Javier 2026-05-19 10:30 EDT "subir un poquito más"):**
+  - **commercial: `0.12`** (+20% desde v28)
+  - **personal: `0.17`** (+20% desde v28)
+- Cableado en `render.js` línea ~741: `musicVol = isCommercial ? 0.12 : 0.17`
+
+**Trayectoria histórica del volumen de música:**
+
+| Versión | Commercial | Personal | Cambio | Razón |
+|---|---|---|---|---|
+| v25-v27 | `0.06` | `0.12` | inicial | Defaults del manual (regla #3 editor: comercial urbano 0.06, personal emotivo 0.12) |
+| v28 (03:25 UTC) | `0.10` | `0.14` | +67% / +17% | Javier "un poquito más volumen" tras v27 aprobado |
+| **v29 (10:30 EDT)** | **`0.12`** | **`0.17`** | **+20% / +20%** | Javier validó v28 audible, pidió "subir un poquito más" |
+
+- **NO bajar de estos valores** sin pedido explícito. Si Javier pide más volumen otra vez, solo subir (siguiente escalón razonable: 0.14 / 0.20). Si pide bajar → SOLO si lo nombra explícito.
 
 ### 6. Logo top-right — siempre visible si el manifest lo trae, tamaño 240px INAMOVIBLE
 
