@@ -29,7 +29,7 @@ app.use(express.json({ limit: '1mb' }))
 app.use(morgan('combined'))
 
 // Health probe for Easypanel — `version` lets us confirm a new deploy is live.
-const BUILD_VERSION = 'v29-music-plus-20pct-louder'
+const BUILD_VERSION = 'v30-visual-styles-semaphore'
 app.get('/health', (_req, res) => {
   res.json({ ok: true, version: BUILD_VERSION, ts: new Date().toISOString() })
 })
@@ -44,21 +44,17 @@ function requireBearer(req, res, next) {
   next()
 }
 
-/**
- * POST /render
- * Body: { jobId: string, userId: string }
- * The worker responds 202 immediately, then runs the render in the
- * background and notifies the Vercel app via the configured CALLBACK_URL.
- */
-app.post('/render', requireBearer, async (req, res) => {
-  const { jobId, userId } = req.body ?? {}
-  if (!jobId || !userId) {
-    return res.status(400).json({ error: 'jobId and userId required' })
-  }
+// ── Render queue: semáforo de 1 render a la vez + timeout (bug #15) ───────────
+// Evita el crash por renders concurrentes saturando el contenedor (incidente v19).
+// Cola FIFO GLOBAL para todos los clientes: el 2º pedido espera su turno, no
+// compite por la máquina. El cliente no se bloquea (recibe 202 al instante; el
+// dashboard hace polling). Escala futura (subir concurrencia / cola compartida
+// con varios workers): ver mackree-ai-worker/CLAUDE.md → Errores #1.
+const RENDER_TIMEOUT_MS = parseInt(process.env.RENDER_TIMEOUT_MS ?? '1500000', 10) // 25 min
+let activeRender = false
+const renderQueue = []
 
-  // Ack right away — render happens async so HTTP doesn't time out.
-  res.status(202).json({ accepted: true, jobId })
-
+async function runRender(jobId, userId) {
   const workDir = path.join(WORKDIR_ROOT, jobId)
   try {
     await mkdir(workDir, { recursive: true })
@@ -114,6 +110,61 @@ app.post('/render', requireBearer, async (req, res) => {
     // Clean tmpfs regardless of outcome — output is already in Supabase
     rm(workDir, { recursive: true, force: true }).catch(() => {})
   }
+}
+
+// Procesa la cola de a uno. Re-llamado al terminar cada render.
+function pump() {
+  if (activeRender) return
+  const next = renderQueue.shift()
+  if (!next) return
+  activeRender = true
+  console.log(`[queue] starting jobId=${next.jobId} (remaining in queue: ${renderQueue.length})`)
+
+  let timer
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('render_timeout')), RENDER_TIMEOUT_MS)
+  })
+
+  Promise.race([runRender(next.jobId, next.userId), timeout])
+    .catch(async (err) => {
+      // runRender atrapa sus propios errores; esto captura sobre todo el timeout,
+      // que libera el slot aunque un render quede colgado (los ffmpeg internos
+      // tienen su propio timeout y terminan muriendo).
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`[queue] jobId=${next.jobId} aborted by guard: ${msg}`)
+      if (msg === 'render_timeout') {
+        await postCallback({
+          jobId: next.jobId,
+          userId: next.userId,
+          status: 'failed',
+          error: 'render_timeout',
+        }).catch(() => {})
+        rm(path.join(WORKDIR_ROOT, next.jobId), { recursive: true, force: true }).catch(() => {})
+      }
+    })
+    .finally(() => {
+      clearTimeout(timer)
+      activeRender = false
+      pump() // siguiente de la fila
+    })
+}
+
+/**
+ * POST /render
+ * Body: { jobId: string, userId: string }
+ * Responde 202 al instante y ENCOLA el render. Se procesa de a UNO a la vez
+ * (semáforo) con timeout de seguridad. Ver bug #15 en CLAUDE.md.
+ */
+app.post('/render', requireBearer, (req, res) => {
+  const { jobId, userId } = req.body ?? {}
+  if (!jobId || !userId) {
+    return res.status(400).json({ error: 'jobId and userId required' })
+  }
+  renderQueue.push({ jobId, userId })
+  const position = renderQueue.length + (activeRender ? 1 : 0)
+  console.log(`[queue] enqueued jobId=${jobId} (position ${position}, active=${activeRender})`)
+  res.status(202).json({ accepted: true, jobId, queued: true, position })
+  pump()
 })
 
 app.use((_req, res) => res.status(404).json({ error: 'not found' }))

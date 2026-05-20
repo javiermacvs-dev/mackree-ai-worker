@@ -38,6 +38,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Música** (12 géneros o "Sin música") — su gusto
 - **Empresa** (cuando haya multi-empresa Creator/Pro) — qué brand usar
 - **Descripción del video** (es su INPUT, no técnico)
+- **Estilo visual de las ilustraciones IA** (v30) — 6 estilos: `doodle` (default, el de Santiago) / `whiteboard` / `flat` / `isometric` / `claymation` / `watercolor`. Es preferencia estética → dropdown en el SaaS, llega en `manifest.visualStyle`. El worker lo aplica en `lib/styles.js` + `lib/llm-moments.js` (LLM devuelve solo el sujeto) + `lib/kie-image.js` (prepend del `prompt_base`). Reemplaza el viejo "cinematic photorealistic automotive" hardcodeado. Default `doodle` si el manifest no lo trae. Aplica en AMBOS flujos (edit + create con voz).
 
 ### Próxima inamovible (sesión SFX)
 - **SFX sincronizados** (whoosh/ding/boom/etc. en momentos clave del transcript) — LLM decide cuándo, cliente no ve la opción
@@ -278,7 +279,7 @@ El toggle Captions fue **removido del dashboard SaaS** en commit del 2026-05-19 
 
 ## ⚠️ Errores documentados — NO repetir
 
-1. **No tener queue en `server.js`** (referencia: error #15 del editor de video). Disparar 2 `POST /render` en paralelo (sea por el usuario o por retry del front Vercel) puede sobrecargar el contenedor. **Pendiente arreglar:** agregar semaphore de 1 render concurrente. Hasta que se haga, regla operativa: nunca asumir que hay queue.
+1. **Queue/semáforo en `server.js`** — ✅ **RESUELTO en v30 (2026-05-20).** Antes no había control de concurrencia: 2 `POST /render` simultáneos (usuario o retry del front Vercel) podían saturar el contenedor (incidente v19). Ahora `server.js` tiene **cola FIFO global + semáforo de 1 render a la vez + timeout de seguridad** (`RENDER_TIMEOUT_MS`, default 25 min). El 2º pedido espera turno (FIFO, ordenado por llegada, sin agrupar por cliente); el cliente igual recibe `202` al instante y el dashboard hace polling. **Escala futura cuando suba el volumen:** (a) subir concurrencia 1→2 **solo tras upgrade de CPU** en Easypanel (renders son CPU-bound 10-16 min; 2 en tier básico thrashean); (b) **mejor:** agregar un 2º worker + mover la cola a un store compartido (Redis / row-lock Supabase), porque esta cola es **in-memory por contenedor** y NO coordina entre réplicas. Dial: env `RENDER_TIMEOUT_MS`.
 
 2. **Perder ajustes entre sesiones** (incidente 2026-05-18). Javier reportó que ajustes aprobados de denoise se "perdieron" al cambiar de sesión. Causa probable: cambios locales que nunca se commitearon, o que se sobrescribieron por un commit posterior. **Fix de proceso:** este archivo `CLAUDE.md` es la fuente de verdad de decisiones aprobadas — cualquier sesión nueva debe leerlo ANTES de tocar `render.js` o `fillerWords.js`.
 
