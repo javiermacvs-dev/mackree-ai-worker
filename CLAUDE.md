@@ -328,6 +328,8 @@ El toggle Captions fue **removido del dashboard SaaS** en commit del 2026-05-19 
 | 4 | `0ebeb265-3872-41b9-98fd-aa25e2b30901` | 2026-05-18 23:32-23:42 UTC (9:46 min) | **`v20-quieter-audio-softer-cuts`** ✅ | **APROBADO INAMOVIBLE** (Javier 23:46 UTC). Disparado por API directa al worker reutilizando assets del render #3. Trim stats idénticos a v19, diferencia audible en denoise audio. |
 | 5 | `f0c52034-b303-4639-a134-5e05c6bf1c97` | 2026-05-19 ~01:16 UTC | `v23-music-12-genres-pro-prompts` | Primer render con stack completo v23. `music:'none'` → Suno NO se ejecuta. Pass 3 imágenes IA SÍ se intenta. Disparado desde dashboard ya rediseñado con dropdowns. |
 
+**Estado al 2026-05-20:** **v30 LIVE** (`v30-visual-styles-semaphore`, commit `5266115`). Suma sobre v23/v29: (1) **estilos visuales elegibles** para las ilustraciones IA in-video (`manifest.visualStyle`, 6 estilos del catálogo, default `doodle`) aplicados en AMBOS flujos (`renderEdit` + pass-3 PORTADO a `renderCreate`) vía `lib/styles.js` + `llm-moments.js` (el LLM devuelve SOLO el sujeto, sin estilo hardcodeado) + `kie-image.js` (prepend del `prompt_base`); reemplaza el viejo "cinematic photorealistic automotive". (2) **semáforo de 1 render + cola FIFO global + timeout `RENDER_TIMEOUT_MS` (25min)** en `server.js` → **bug #15 RESUELTO**.
+
 **Estado al 2026-05-19 madrugada:** **v23 es el comportamiento LIVE del worker.** Incluye v20 (audio + cortes inamovibles) + v21 (música Suno V5 automática) + v22 (imágenes IA automáticas) + v23 (12 géneros de música con prompts pro).
 
 ### Valores inamovibles del audio + cortes (v20, no cambiar)
@@ -385,7 +387,7 @@ El trigger del pass 3 está hard-coded a `style === 'commercial'` por compat con
 | Audio chain (edit mode) | `aresample=44100 → highpass=100 → afftdn=nr=50 → dynaudnorm → format` por clip; después concat → `loudnorm I=-16:LRA=11:TP=-1.5` → mix con música → `alimiter=limit=0.95` |
 | Video chain (edit mode) | `setpts → scale → crop → fps → setsar → deshake (si motion>1) → unsharp → eq → format` |
 | Captions | Whisper word-level → ASS karaoke con `Impact 76px`, color verde limón `&H0000FF80` |
-| Build version | leer `BUILD_VERSION` en `server.js` (actual: `v19-perf-parallel-whisper`) |
+| Build version | leer `BUILD_VERSION` en `server.js` (actual: `v30-visual-styles-semaphore`) |
 
 ---
 
