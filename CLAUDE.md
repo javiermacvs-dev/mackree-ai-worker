@@ -248,6 +248,7 @@ trimSilences(item.filePath, workDir, label, {
   - **commercial: `0.12`** (+20% desde v28)
   - **personal: `0.17`** (+20% desde v28)
 - Cableado en `render.js` línea ~741: `musicVol = isCommercial ? 0.12 : 0.17`
+- **`amix` SIEMPRE con `normalize=0` (v38, INAMOVIBLE):** por defecto `amix` divide cada pista entre el nº de inputs → la voz quedaba a la mitad (mezcla voz+música) y aún más baja tras el pass de SFX (÷ 1+nº SFX); además la música quedaba tan abajo que solo se oía cuando la voz paraba (~final). Con `normalize=0` la voz se queda a su nivel pleno (loudnorm -16) y la música suena a 0.12 **desde el inicio**. El `alimiter=0.95` posterior evita clipping. Aplica a los 4 `amix` (voz+música y SFX, en create y edit). NO quitar `normalize=0`.
 
 **Trayectoria histórica del volumen de música:**
 
@@ -330,7 +331,9 @@ El toggle Captions fue **removido del dashboard SaaS** en commit del 2026-05-19 
 | 4 | `0ebeb265-3872-41b9-98fd-aa25e2b30901` | 2026-05-18 23:32-23:42 UTC (9:46 min) | **`v20-quieter-audio-softer-cuts`** ✅ | **APROBADO INAMOVIBLE** (Javier 23:46 UTC). Disparado por API directa al worker reutilizando assets del render #3. Trim stats idénticos a v19, diferencia audible en denoise audio. |
 | 5 | `f0c52034-b303-4639-a134-5e05c6bf1c97` | 2026-05-19 ~01:16 UTC | `v23-music-12-genres-pro-prompts` | Primer render con stack completo v23. `music:'none'` → Suno NO se ejecuta. Pass 3 imágenes IA SÍ se intenta. Disparado desde dashboard ya rediseñado con dropdowns. |
 
-**Estado al 2026-05-23: v37 LIVE** (`v37-xfade-transitions`). Suma sobre v36: **Transiciones automáticas (xfade cross-dissolve 0.35s)** entre segmentos en create mode (inamovible #18), con compensación de duración (video sigue durando = voz) y **fallback a corte duro**. Validado con ffmpeg local. Pendiente: edit mode.
+**Estado al 2026-05-23: v38 LIVE** (`v38-audio-mix-normalize`). Suma sobre v37: **fix de mezcla de audio** — `amix` con `normalize=0` en los 4 sitios (voz+música y SFX, create+edit). Antes `amix` dividía la voz entre el nº de pistas → voz muy baja y música solo audible al final; ahora la voz se queda a nivel pleno y la música suena desde el inicio (reporte de Javier, render `mpipzdhr1e1pl7642lx`). Validado E2E: render con 8 medias salió con fondo real, transiciones, Ken Burns, doodles IA, subtítulos y audio — aprobado "en términos generales súper bien".
+
+**Estado al 2026-05-23: v37** (`v37-xfade-transitions`). Suma sobre v36: **Transiciones automáticas (xfade cross-dissolve 0.35s)** entre segmentos en create mode (inamovible #18), con compensación de duración (video sigue durando = voz) y **fallback a corte duro**. Validado con ffmpeg local. Pendiente: edit mode.
 
 **Estado al 2026-05-23: v36** (`v36-subtitle-styles`). Suma sobre v35: **6 estilos de subtítulos seleccionables** (`lib/subtitle-styles.js` + `buildASS(words, styleKey)`). Default `classic` = look actual exacto (cero regresión verificada). Es elección por-video (`manifest.subtitleStyle`); la UI (menú + preview al hover) se cablea en el SaaS (`mackree-ai`).
 
@@ -424,7 +427,7 @@ El trigger del pass 3 está hard-coded a `style === 'commercial'` por compat con
 | Audio chain (edit mode) | `aresample=44100 → highpass=100 → afftdn=nr=50 → dynaudnorm → format` por clip; después concat → `loudnorm I=-16:LRA=11:TP=-1.5` → mix con música → `alimiter=limit=0.95` |
 | Video chain (edit mode) | `setpts → scale → crop → fps → setsar → deshake (si motion>1) → unsharp → eq → format` |
 | Captions | Whisper word-level → ASS karaoke con `Impact 76px`, color verde limón `&H0000FF80` |
-| Build version | leer `BUILD_VERSION` en `server.js` (actual: `v37-xfade-transitions`) |
+| Build version | leer `BUILD_VERSION` en `server.js` (actual: `v38-audio-mix-normalize`) |
 
 ---
 
