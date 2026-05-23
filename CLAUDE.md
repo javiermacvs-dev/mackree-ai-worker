@@ -327,7 +327,9 @@ El toggle Captions fue **removido del dashboard SaaS** en commit del 2026-05-19 
 | 4 | `0ebeb265-3872-41b9-98fd-aa25e2b30901` | 2026-05-18 23:32-23:42 UTC (9:46 min) | **`v20-quieter-audio-softer-cuts`** ✅ | **APROBADO INAMOVIBLE** (Javier 23:46 UTC). Disparado por API directa al worker reutilizando assets del render #3. Trim stats idénticos a v19, diferencia audible en denoise audio. |
 | 5 | `f0c52034-b303-4639-a134-5e05c6bf1c97` | 2026-05-19 ~01:16 UTC | `v23-music-12-genres-pro-prompts` | Primer render con stack completo v23. `music:'none'` → Suno NO se ejecuta. Pass 3 imágenes IA SÍ se intenta. Disparado desde dashboard ya rediseñado con dropdowns. |
 
-**Estado al 2026-05-23: v33 LIVE** (`v33-create-music`). Suma sobre v32: **BUGFIX música en create mode** — `renderCreate` ahora GENERA música con Kie Suno cuando el cliente elige un género (`manifest.music !== 'none'`), igual que `renderEdit`. Antes el flujo "Crear video con voz" solo leía un `music.mp3` que nadie sube → SIEMPRE salía sin música (Javier eligió electrónica y no se aplicó). Además se alineó el volumen de música de create mode al inamovible v29 (`0.12` commercial / `0.17` personal; antes `0.06` hardcodeado). Cableado en la rama "Optional music" de `renderCreate`.
+**Estado al 2026-05-23: v34 LIVE** (`v34-create-sfx`). Suma sobre v33: **BUGFIX SFX en create mode** — el pass 4 de SFX (AI-driven, inamovible #15) ahora también corre en `renderCreate` (flujo "Crear video con voz"); antes solo estaba en `renderEdit`, por eso Javier no veía SFX en sus pruebas de create. Port verbatim del bloque de edit, usando `voiceDur` como totalDur. Mismo gate (`sfx !== 'off'` + words + ANTHROPIC_API_KEY), fallback graceful.
+
+**Estado al 2026-05-23: v33** (`v33-create-music`). Suma sobre v32: **BUGFIX música en create mode** — `renderCreate` ahora GENERA música con Kie Suno cuando el cliente elige un género (`manifest.music !== 'none'`), igual que `renderEdit`. Antes el flujo "Crear video con voz" solo leía un `music.mp3` que nadie sube → SIEMPRE salía sin música (Javier eligió electrónica y no se aplicó). Además se alineó el volumen de música de create mode al inamovible v29 (`0.12` commercial / `0.17` personal; antes `0.06` hardcodeado). Cableado en la rama "Optional music" de `renderCreate`.
 
 **Estado al 2026-05-23: v32** (`v32-real-timelapse`). Suma sobre v31: **Timelapse REAL del footage en create mode** (inamovible #16) — los clips de instalación se aceleran de verdad para entrar enteros en su slot de narración (`speed = min(60, max(1, origDur/segDur))`), en vez de mostrar solo el inicio. Solo create mode; edit mode intacto. Cableado en la rama de video de `renderCreate`.
 
@@ -413,7 +415,7 @@ El trigger del pass 3 está hard-coded a `style === 'commercial'` por compat con
 | Audio chain (edit mode) | `aresample=44100 → highpass=100 → afftdn=nr=50 → dynaudnorm → format` por clip; después concat → `loudnorm I=-16:LRA=11:TP=-1.5` → mix con música → `alimiter=limit=0.95` |
 | Video chain (edit mode) | `setpts → scale → crop → fps → setsar → deshake (si motion>1) → unsharp → eq → format` |
 | Captions | Whisper word-level → ASS karaoke con `Impact 76px`, color verde limón `&H0000FF80` |
-| Build version | leer `BUILD_VERSION` en `server.js` (actual: `v33-create-music`) |
+| Build version | leer `BUILD_VERSION` en `server.js` (actual: `v34-create-sfx`) |
 
 ---
 
