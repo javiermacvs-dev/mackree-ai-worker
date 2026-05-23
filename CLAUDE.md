@@ -38,6 +38,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 17. **Ken Burns (zoom/pan) en imágenes** — **v35** ✅ Las imágenes/doodles NUNCA salen estáticas: cada segmento de imagen lleva movimiento sutil (zoom-in lento 1.0→1.12, o pan horizontal izq/der), rotando por índice para dar variedad (estilo Santiago). Helper `imageMotionChain(src, out, segDur, variant)` en `lib/render.js` (~línea 425) con `zoompan` + pre-escala 2x para suavizar. Hoy aplica a los segmentos de imagen de `renderCreate`. Pendiente: extender a edit mode y a los overlays de imágenes IA del pass 3. La SELECCIÓN automática del efecto por IA (B3) llegará con `lib/llm-editing-effects.js`; por ahora rota determinísticamente.
 
 ### Cliente ELIGE (preferencia estética)
+- **Estilo de subtítulos** (v36) — 6 presets aprobados (`classic`/`hormozi`/`tiktok_box`/`neon`/`minimal`/`duo`), llega en `manifest.subtitleStyle`. Catálogo en `lib/subtitle-styles.js`; `buildASS(words, styleKey)` lo aplica; default `classic` = look actual EXACTO (cero regresión). Los captions siguen SIEMPRE on (inamovible #7) — solo cambia el LOOK, no se puede apagar.
 - **Música** (12 géneros o "Sin música") — su gusto
 - **Empresa** (cuando haya multi-empresa Creator/Pro) — qué brand usar
 - **Descripción del video** (es su INPUT, no técnico)
@@ -328,7 +329,9 @@ El toggle Captions fue **removido del dashboard SaaS** en commit del 2026-05-19 
 | 4 | `0ebeb265-3872-41b9-98fd-aa25e2b30901` | 2026-05-18 23:32-23:42 UTC (9:46 min) | **`v20-quieter-audio-softer-cuts`** ✅ | **APROBADO INAMOVIBLE** (Javier 23:46 UTC). Disparado por API directa al worker reutilizando assets del render #3. Trim stats idénticos a v19, diferencia audible en denoise audio. |
 | 5 | `f0c52034-b303-4639-a134-5e05c6bf1c97` | 2026-05-19 ~01:16 UTC | `v23-music-12-genres-pro-prompts` | Primer render con stack completo v23. `music:'none'` → Suno NO se ejecuta. Pass 3 imágenes IA SÍ se intenta. Disparado desde dashboard ya rediseñado con dropdowns. |
 
-**Estado al 2026-05-23: v35 LIVE** (`v35-ken-burns`). Suma sobre v34: **Ken Burns (zoom/pan) en imágenes** (inamovible #17) — las imágenes de `renderCreate` ya no salen estáticas; llevan zoom-in/pan rotado por índice. Receta `zoompan` + pre-escala 2x validada con ffmpeg local (zoom 1.0→1.12 y pan horizontal visibles, duración exacta).
+**Estado al 2026-05-23: v36 LIVE** (`v36-subtitle-styles`). Suma sobre v35: **6 estilos de subtítulos seleccionables** (`lib/subtitle-styles.js` + `buildASS(words, styleKey)`). Default `classic` = look actual exacto (cero regresión verificada). Es elección por-video (`manifest.subtitleStyle`); la UI (menú + preview al hover) se cablea en el SaaS (`mackree-ai`).
+
+**Estado al 2026-05-23: v35** (`v35-ken-burns`). Suma sobre v34: **Ken Burns (zoom/pan) en imágenes** (inamovible #17) — las imágenes de `renderCreate` ya no salen estáticas; llevan zoom-in/pan rotado por índice. Receta `zoompan` + pre-escala 2x validada con ffmpeg local (zoom 1.0→1.12 y pan horizontal visibles, duración exacta).
 
 **Estado al 2026-05-23: v34** (`v34-create-sfx`). Suma sobre v33: **BUGFIX SFX en create mode** — el pass 4 de SFX (AI-driven, inamovible #15) ahora también corre en `renderCreate` (flujo "Crear video con voz"); antes solo estaba en `renderEdit`, por eso Javier no veía SFX en sus pruebas de create. Port verbatim del bloque de edit, usando `voiceDur` como totalDur. Mismo gate (`sfx !== 'off'` + words + ANTHROPIC_API_KEY), fallback graceful.
 
@@ -418,7 +421,7 @@ El trigger del pass 3 está hard-coded a `style === 'commercial'` por compat con
 | Audio chain (edit mode) | `aresample=44100 → highpass=100 → afftdn=nr=50 → dynaudnorm → format` por clip; después concat → `loudnorm I=-16:LRA=11:TP=-1.5` → mix con música → `alimiter=limit=0.95` |
 | Video chain (edit mode) | `setpts → scale → crop → fps → setsar → deshake (si motion>1) → unsharp → eq → format` |
 | Captions | Whisper word-level → ASS karaoke con `Impact 76px`, color verde limón `&H0000FF80` |
-| Build version | leer `BUILD_VERSION` en `server.js` (actual: `v35-ken-burns`) |
+| Build version | leer `BUILD_VERSION` en `server.js` (actual: `v36-subtitle-styles`) |
 
 ---
 
