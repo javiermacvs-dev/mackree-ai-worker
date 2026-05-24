@@ -335,6 +335,8 @@ El toggle Captions fue **removido del dashboard SaaS** en commit del 2026-05-19 
 | 4 | `0ebeb265-3872-41b9-98fd-aa25e2b30901` | 2026-05-18 23:32-23:42 UTC (9:46 min) | **`v20-quieter-audio-softer-cuts`** ✅ | **APROBADO INAMOVIBLE** (Javier 23:46 UTC). Disparado por API directa al worker reutilizando assets del render #3. Trim stats idénticos a v19, diferencia audible en denoise audio. |
 | 5 | `f0c52034-b303-4639-a134-5e05c6bf1c97` | 2026-05-19 ~01:16 UTC | `v23-music-12-genres-pro-prompts` | Primer render con stack completo v23. `music:'none'` → Suno NO se ejecuta. Pass 3 imágenes IA SÍ se intenta. Disparado desde dashboard ya rediseñado con dropdowns. |
 
+**Estado al 2026-05-24: v44 LIVE** (`v44-intro-outro-crf26`). Hotfix sobre v43: el concat del intro/outro (`lib/intro-outro.js`) usaba `-crf 20` → re-encodeaba el video completo a alta calidad e inflaba el archivo > límite global de Supabase Storage (50 MB) → fallo de upload "object exceeded the maximum allowed size". Bajado a **`-crf 26`** (igual que el resto del pipeline) → el archivo vuelve al tamaño previo que ya se subía OK. El bucket `video-jobs` tiene `file_size_limit:null` (aplica el global del proyecto). Si en el futuro hacen falta videos largos pesados, subir el límite global de Storage (afecta infra compartida con el bot — consultar antes).
+
 **Estado al 2026-05-24: v43 LIVE** (`v43-auto-intro-outro-logo`). Suma sobre v42: **intro glitch + outro blanco con logo, automáticos** (inamovible #22) — `lib/intro-outro.js`, réplica de los Reels manuales, concatenados en create+edit cuando hay logo. Verificado visualmente con el logo de Mac Gyver.
 
 **Estado al 2026-05-24: v42** (`v42-ai-image-card-no-rotation`). Suma sobre v41: **fix DEFINITIVO de orientación de imágenes IA** (inamovible #21) — generadas en 16:9 + montadas como card centrada con blur. El prompt-only de v41 no bastó (nano-banana acostaba las infografías igual). Bug crítico reportado por Javier ("sale volteada, se ve horrible"). Verificado con imagen real antes de deployar.
@@ -441,7 +443,7 @@ El trigger del pass 3 está hard-coded a `style === 'commercial'` por compat con
 | Audio chain (edit mode) | `aresample=44100 → highpass=100 → afftdn=nr=50 → dynaudnorm → format` por clip; después concat → `loudnorm I=-16:LRA=11:TP=-1.5` → mix con música → `alimiter=limit=0.95` |
 | Video chain (edit mode) | `setpts → scale → crop → fps → setsar → deshake (si motion>1) → unsharp → eq → format` |
 | Captions | Whisper word-level → ASS karaoke con `Impact 76px`, color verde limón `&H0000FF80` |
-| Build version | leer `BUILD_VERSION` en `server.js` (actual: `v43-auto-intro-outro-logo`) |
+| Build version | leer `BUILD_VERSION` en `server.js` (actual: `v44-intro-outro-crf26`) |
 
 ---
 
