@@ -9,3 +9,6 @@ renders
 .idea
 .vscode
 *.tsbuildinfo
+tmp_*/
+_orient_test*
+_*_out/
