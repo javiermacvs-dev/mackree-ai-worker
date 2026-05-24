@@ -247,11 +247,12 @@ trimSilences(item.filePath, workDir, label, {
 
 ### 5. Voz y música — INAMOVIBLE (v29 valores aprobados)
 
-- **Voz protagonista:** `volume=1.3 + alimiter=limit=0.95` (regla #2 del editor manual, validada).
-- **Música según tipo (v29 INAMOVIBLE, Javier 2026-05-19 10:30 EDT "subir un poquito más"):**
-  - **commercial: `0.12`** (+20% desde v28)
-  - **personal: `0.17`** (+20% desde v28)
-- Cableado en `render.js` línea ~741: `musicVol = isCommercial ? 0.12 : 0.17`
+- **Voz protagonista:** `volume=1.45 + alimiter=limit=0.95` (subida 1.3→1.45 en v45 a pedido de Javier; pasa por `loudnorm=I=-16`, así que el bump de volume refuerza pero loudnorm domina la sonoridad final — para subir la voz de verdad, el dial real es loudnorm I -16→-14).
+- **Música según tipo (v45, Javier 2026-05-24 "voz más alta, música más baja"):**
+  - **commercial: `0.09`** (bajado desde 0.12 — la voz debía destacar más)
+  - **personal: `0.17`** (sin cambios)
+- Cableado en `render.js`: `musicVol = isCommercial ? 0.09 : 0.17` (create + edit) + voz `volume=1.45` (create, línea ~552).
+- **Trayectorias:** música comercial v27=0.06 → v28=0.10 → v29=0.12 → **v45=0.09**; voz 1.3 → **v45=1.45**. Próximos diales si Javier pide: más voz → loudnorm I -16→-14; menos música → bajar de 0.09. **Solo con pedido explícito.**
 - **`amix` SIEMPRE con `normalize=0` (v38, INAMOVIBLE):** por defecto `amix` divide cada pista entre el nº de inputs → la voz quedaba a la mitad (mezcla voz+música) y aún más baja tras el pass de SFX (÷ 1+nº SFX); además la música quedaba tan abajo que solo se oía cuando la voz paraba (~final). Con `normalize=0` la voz se queda a su nivel pleno (loudnorm -16) y la música suena a 0.12 **desde el inicio**. El `alimiter=0.95` posterior evita clipping. Aplica a los 4 `amix` (voz+música y SFX, en create y edit). NO quitar `normalize=0`.
 
 **Trayectoria histórica del volumen de música:**
@@ -334,6 +335,8 @@ El toggle Captions fue **removido del dashboard SaaS** en commit del 2026-05-19 
 | 3 | `85e66fb3-cff6-4319-8acb-b32b81b724c9` | 2026-05-18 21:55-22:05 UTC (9:55 min) | `v19-perf-parallel-whisper` | "Me fascinó, aprobado" — Javier creía v20 pero contenedor seguía v19. |
 | 4 | `0ebeb265-3872-41b9-98fd-aa25e2b30901` | 2026-05-18 23:32-23:42 UTC (9:46 min) | **`v20-quieter-audio-softer-cuts`** ✅ | **APROBADO INAMOVIBLE** (Javier 23:46 UTC). Disparado por API directa al worker reutilizando assets del render #3. Trim stats idénticos a v19, diferencia audible en denoise audio. |
 | 5 | `f0c52034-b303-4639-a134-5e05c6bf1c97` | 2026-05-19 ~01:16 UTC | `v23-music-12-genres-pro-prompts` | Primer render con stack completo v23. `music:'none'` → Suno NO se ejecuta. Pass 3 imágenes IA SÍ se intenta. Disparado desde dashboard ya rediseñado con dropdowns. |
+
+**Estado al 2026-05-24: v45 LIVE** (`v45-audio-voice-up-music-down`). Suma sobre v44: **ajuste de balance de audio a pedido de Javier** ("voz más alta, música más baja", tras aprobar el primer render completo) — voz `volume=1.3→1.45`, música comercial `0.12→0.09` (personal 0.17 igual), en create+edit. Ver sección 5 (trayectorias actualizadas). Requiere re-render para oírse (audio bakeado).
 
 **Estado al 2026-05-24: v44 LIVE** (`v44-intro-outro-crf26`). Hotfix sobre v43: el concat del intro/outro (`lib/intro-outro.js`) usaba `-crf 20` → re-encodeaba el video completo a alta calidad e inflaba el archivo > límite global de Supabase Storage (50 MB) → fallo de upload "object exceeded the maximum allowed size". Bajado a **`-crf 26`** (igual que el resto del pipeline) → el archivo vuelve al tamaño previo que ya se subía OK. El bucket `video-jobs` tiene `file_size_limit:null` (aplica el global del proyecto). Si en el futuro hacen falta videos largos pesados, subir el límite global de Storage (afecta infra compartida con el bot — consultar antes).
 
@@ -443,7 +446,7 @@ El trigger del pass 3 está hard-coded a `style === 'commercial'` por compat con
 | Audio chain (edit mode) | `aresample=44100 → highpass=100 → afftdn=nr=50 → dynaudnorm → format` por clip; después concat → `loudnorm I=-16:LRA=11:TP=-1.5` → mix con música → `alimiter=limit=0.95` |
 | Video chain (edit mode) | `setpts → scale → crop → fps → setsar → deshake (si motion>1) → unsharp → eq → format` |
 | Captions | Whisper word-level → ASS karaoke con `Impact 76px`, color verde limón `&H0000FF80` |
-| Build version | leer `BUILD_VERSION` en `server.js` (actual: `v44-intro-outro-crf26`) |
+| Build version | leer `BUILD_VERSION` en `server.js` (actual: `v45-audio-voice-up-music-down`) |
 
 ---
 
