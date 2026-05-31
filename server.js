@@ -1,4 +1,4 @@
-// MackreeAI render worker — Express server that wraps FFmpeg.
+﻿// Chixy render worker — Express server that wraps FFmpeg.
 // Receives signed render requests from the Vercel app, pulls assets from
 // Supabase Storage, runs the pipeline, uploads the output, and posts back.
 
@@ -170,5 +170,5 @@ app.post('/render', requireBearer, (req, res) => {
 app.use((_req, res) => res.status(404).json({ error: 'not found' }))
 
 app.listen(PORT, () => {
-  console.log(`MackreeAI worker listening on :${PORT}`)
+  console.log(`Chixy worker listening on :${PORT}`)
 })

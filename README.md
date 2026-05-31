@@ -1,6 +1,6 @@
-# MackreeAI Worker
+﻿# Chixy Worker
 
-FFmpeg render worker for [MackreeAI](https://mackree-ai.vercel.app). Runs as
+FFmpeg render worker for [Chixy](https://mackree-ai.vercel.app). Runs as
 a Docker service on Easypanel — keeps the heavy lifting off Vercel
 serverless (no FFmpeg, no shared filesystem, 4.5 MB body limit).
 

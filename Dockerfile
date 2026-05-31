@@ -1,4 +1,4 @@
-# Worker para MackreeAI: corre el motor FFmpeg fuera de Vercel.
+﻿# Worker para Chixy: corre el motor FFmpeg fuera de Vercel.
 # Easypanel-friendly: imagen ligera, healthcheck, env vars via UI.
 
 FROM node:22-slim

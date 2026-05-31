@@ -1,8 +1,8 @@
-{
+﻿{
   "name": "mackree-ai-worker",
   "version": "0.1.0",
   "private": true,
-  "description": "FFmpeg render worker for MackreeAI. Deploys to Easypanel as a Docker service.",
+  "description": "FFmpeg render worker for Chixy. Deploys to Easypanel as a Docker service.",
   "type": "module",
   "main": "server.js",
   "scripts": {

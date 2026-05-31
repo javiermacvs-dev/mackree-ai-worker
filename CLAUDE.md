@@ -1,14 +1,14 @@
-# CLAUDE.md — mackree-ai-worker
+﻿# CLAUDE.md — mackree-ai-worker
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Worker FFmpeg productivo para MackreeAI.** Corre en Docker en Easypanel (`worker-mackree-ai.kqlrkv.easypanel.host`). Recibe `POST /render {jobId, userId}` desde el Vercel del SaaS, baja assets de Supabase Storage, renderiza con FFmpeg + Whisper + ASS captions, sube `output.mp4` y dispara callback. Arquitectura general en `README.md`.
+> **Worker FFmpeg productivo para Chixy.** Corre en Docker en Easypanel (`worker-mackree-ai.kqlrkv.easypanel.host`). Recibe `POST /render {jobId, userId}` desde el Vercel del SaaS, baja assets de Supabase Storage, renderiza con FFmpeg + Whisper + ASS captions, sube `output.mp4` y dispara callback. Arquitectura general en `README.md`.
 
 ---
 
 ## 🧠 FILOSOFÍA DEL PRODUCTO — INAMOVIBLE (Javier 2026-05-19)
 
-**Regla cero del producto MackreeAI:**
+**Regla cero del producto Chixy:**
 
 > **TODO lo técnico / de calidad / de edición profesional = INAMOVIBLE EN BACKEND. El cliente NO tiene toggle, NO ve la opción, NO puede desactivarlo. Se aplica automático a TODO render.**
 >
