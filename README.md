@@ -1,6 +1,6 @@
 ﻿# Chixy Worker
 
-FFmpeg render worker for [Chixy](https://mackree-ai.vercel.app). Runs as
+FFmpeg render worker for [Chixy](https://chixy.vercel.app). Runs as
 a Docker service on Easypanel — keeps the heavy lifting off Vercel
 serverless (no FFmpeg, no shared filesystem, 4.5 MB body limit).
 
@@ -51,7 +51,7 @@ curl -X POST http://localhost:8080/render \
    - `WORKER_SECRET` (`openssl rand -hex 32`, share with Vercel)
    - `SUPABASE_URL` = `https://pbfbgezarmcqxuctdrml.supabase.co`
    - `SUPABASE_SERVICE_ROLE_KEY` (from Supabase dashboard)
-   - `CALLBACK_URL` = `https://mackree-ai.vercel.app/api/webhooks/render-complete`
+   - `CALLBACK_URL` = `https://chixy.vercel.app/api/webhooks/render-complete`
    - `STORAGE_BUCKET` = `video-jobs`
    - `OPENAI_API_KEY` (for Whisper captions; optional)
 5. Resource limits: 2 CPU, 2-4 GB RAM, 10 GB ephemeral disk (FFmpeg loves RAM/disk)
