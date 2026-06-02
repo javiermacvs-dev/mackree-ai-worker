@@ -457,7 +457,7 @@ El trigger del pass 3 está hard-coded a `style === 'commercial'` por compat con
 | Audio chain (edit mode) | `aresample=44100 → highpass=100 → afftdn=nr=50 → dynaudnorm → format` por clip; después concat → `loudnorm I=-16:LRA=11:TP=-1.5` → mix con música → `alimiter=limit=0.95` |
 | Video chain (edit mode) | `setpts → scale → crop → fps → setsar → deshake (si motion>1) → unsharp → eq → format` |
 | Captions | Whisper word-level → ASS karaoke con `Impact 76px`, color verde limón `&H0000FF80` |
-| Build version | leer `BUILD_VERSION` en `server.js` (actual: `v56-music-fragments`) |
+| Build version | leer `BUILD_VERSION` en `server.js` (actual: `v57-captions-front`) |
 
 ---
 
