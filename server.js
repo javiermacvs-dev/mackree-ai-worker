@@ -6,8 +6,9 @@ import express from 'express'
 import morgan from 'morgan'
 import { rm, mkdir } from 'node:fs/promises'
 import path from 'node:path'
-import { downloadJobAssets, uploadOutput, uploadThumbnail, readJobManifest } from './lib/storage.js'
+import { downloadJobAssets, uploadOutput, uploadThumbnail, readJobManifest, downloadOneAsset, uploadAsset, createSignedAssetUrl } from './lib/storage.js'
 import { renderJob } from './lib/render.js'
+import { cutFragments } from './lib/music-fragments.js'
 import { postCallback } from './lib/callback.js'
 import { exec } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -29,7 +30,7 @@ app.use(express.json({ limit: '1mb' }))
 app.use(morgan('combined'))
 
 // Health probe for Easypanel — `version` lets us confirm a new deploy is live.
-const BUILD_VERSION = 'v55-contact-card'
+const BUILD_VERSION = 'v56-music-fragments'
 app.get('/health', (_req, res) => {
   res.json({ ok: true, version: BUILD_VERSION, ts: new Date().toISOString() })
 })
@@ -165,6 +166,39 @@ app.post('/render', requireBearer, (req, res) => {
   console.log(`[queue] enqueued jobId=${jobId} (position ${position}, active=${activeRender})`)
   res.status(202).json({ accepted: true, jobId, queued: true, position })
   pump()
+})
+
+/**
+ * POST /music-fragments  (WS10)
+ * Body: { jobId, userId, durationSec }
+ * Baja la canción propia (music.mp3 ya subida), corta hasta 4 fragmentos de
+ * durationSec de distintas partes, los sube y devuelve URLs firmadas para que el
+ * cliente los ESCUCHE y elija. Síncrono (segundos), fuera de la cola de render.
+ */
+app.post('/music-fragments', requireBearer, async (req, res) => {
+  const { jobId, userId, durationSec } = req.body ?? {}
+  if (!jobId || !userId) return res.status(400).json({ error: 'jobId and userId required' })
+  const workDir = path.join(WORKDIR_ROOT, `frag_${jobId}`)
+  try {
+    await mkdir(workDir, { recursive: true })
+    const musicPath = path.join(workDir, 'music.mp3')
+    await downloadOneAsset(userId, jobId, 'music.mp3', musicPath)
+    const frags = await cutFragments({ musicPath, durationSec: Number(durationSec) || 30, workDir })
+    const options = []
+    for (const f of frags) {
+      const remoteName = `music_frag_${f.index}.m4a`
+      await uploadAsset(userId, jobId, f.localPath, remoteName, 'audio/mp4')
+      const url = await createSignedAssetUrl(userId, jobId, remoteName, 3600)
+      options.push({ index: f.index, offsetSec: f.offsetSec, label: f.label, url })
+    }
+    res.json({ ok: true, options })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[music-fragments] jobId=${jobId}: ${msg}`)
+    res.status(500).json({ error: 'fragments_failed', detail: msg.slice(0, 300) })
+  } finally {
+    rm(workDir, { recursive: true, force: true }).catch(() => {})
+  }
 })
 
 app.use((_req, res) => res.status(404).json({ error: 'not found' }))
