@@ -9,7 +9,7 @@ import path from 'node:path'
 import { downloadJobAssets, uploadOutput, uploadThumbnail, readJobManifest, downloadOneAsset, uploadAsset, createSignedAssetUrl, downloadBrandLogo } from './lib/storage.js'
 import { renderJob } from './lib/render.js'
 import { cutFragments } from './lib/music-fragments.js'
-import { generateCover, generateCoverTitle } from './lib/cover.js'
+import { generateCover, generateCoverFields, extractCoverFrames, FONT_CATALOG } from './lib/cover.js'
 import { existsSync } from 'node:fs'
 import { postCallback } from './lib/callback.js'
 import { exec } from 'node:child_process'
@@ -33,7 +33,7 @@ app.use(express.json({ limit: '1mb' }))
 app.use(morgan('combined'))
 
 // Health probe for Easypanel — `version` lets us confirm a new deploy is live.
-const BUILD_VERSION = 'v67-cover-url-format-aspect'
+const BUILD_VERSION = 'v68-cover-capcut-editor'
 app.get('/health', (_req, res) => {
   res.json({ ok: true, version: BUILD_VERSION, ts: new Date().toISOString() })
 })
@@ -88,22 +88,37 @@ async function runRender(jobId, userId) {
       console.warn(`[render] thumbnail failed (non-blocking):`, thumbErr?.message ?? thumbErr)
     }
 
-    // WS11: PORTADA — frame del video + título IA llamativo. La IA propone el título;
-    // el cliente lo puede editar y regenerar vía POST /cover. No bloquea si falla.
+    // WS11: PORTADA estilo CapCut — frame REAL del footage + textos IA editables.
+    // La IA propone los textos; el cliente edita todo (textos/tipografía/color/frame)
+    // y regenera vía POST /cover. Frames candidatos del footage real para elegir.
+    // No bloquea si falla.
     let coverUrl = null
     let coverTitle = null
+    let coverFields = null
+    let coverFrames = []
     try {
-      coverTitle = await generateCoverTitle(manifest?.script || manifest?.description || '', ANTHROPIC_KEY)
       const logoPath = manifest?.brandLogoUrl ? path.join(workDir, 'logo.png') : null
+      const logo = logoPath && existsSync(logoPath) ? logoPath : null
+      // 1) Frames candidatos del footage real (antes de las ilustraciones IA).
+      const framePaths = await extractCoverFrames({ workDir, fallbackVideo: outputPath, format: manifest?.format, max: 6 })
+      for (let i = 0; i < framePaths.length; i++) {
+        try { coverFrames.push(await uploadAsset(userId, jobId, framePaths[i], `cover_frame_${i}.jpg`, 'image/jpeg')) } catch { /* skip */ }
+      }
+      // 2) Textos propuestos por IA + estilo por defecto.
+      const f = await generateCoverFields(manifest?.script || manifest?.description || '', ANTHROPIC_KEY)
+      coverFields = { ...f, font: 'anton', accentColor: '#FFE400', frameIndex: 0 }
+      // 3) Componer la portada con el primer frame real.
       const coverPath = await generateCover({
+        framePath: framePaths[0] || null,
         videoPath: outputPath,
-        title: coverTitle,
         format: manifest?.format,
-        logoPath: logoPath && existsSync(logoPath) ? logoPath : null,
+        logoPath: logo,
         workDir,
+        fields: coverFields,
       })
       coverUrl = await uploadAsset(userId, jobId, coverPath, 'cover.png', 'image/png')
-      console.log(`[render] cover uploaded: ${coverUrl} ("${coverTitle}")`)
+      coverTitle = [coverFields.title1, coverFields.title2].filter(Boolean).join(' ')
+      console.log(`[render] cover uploaded: ${coverUrl} (${coverFrames.length} frames, "${coverTitle}")`)
     } catch (coverErr) {
       console.warn(`[render] cover failed (non-blocking):`, coverErr?.message ?? coverErr)
     }
@@ -116,6 +131,8 @@ async function runRender(jobId, userId) {
       thumbnailUrl: thumbUrl,
       coverUrl,
       coverTitle,
+      coverFields,
+      coverFrames,
       stats,
     })
     console.log(`[render] done jobId=${jobId} url=${publicUrl}`)
@@ -202,12 +219,13 @@ app.post('/render', requireBearer, (req, res) => {
  */
 /**
  * POST /cover  (WS11)
- * Body: { jobId, userId, title? }
- * Regenera la PORTADA del video con un título editado (o autogenerado si no viene).
- * Reusa el output.mp4 + el job.json ya en Storage. Síncrono (pocos segundos).
+ * Body: { jobId, userId, fields?: { title1,title2,badge,subtitle,font,accentColor,frameIndex }, title? (legacy) }
+ * Regenera la PORTADA estilo CapCut con los campos editados (textos/tipografía/
+ * color/frame). Reusa output.mp4 + job.json + el frame elegido (cover_frame_N.jpg)
+ * ya en Storage. Síncrono (pocos segundos).
  */
 app.post('/cover', requireBearer, async (req, res) => {
-  const { jobId, userId, title } = req.body ?? {}
+  const { jobId, userId, fields, title } = req.body ?? {}
   if (!jobId || !userId) return res.status(400).json({ error: 'jobId and userId required' })
   const workDir = path.join(WORKDIR_ROOT, `cover-${jobId}`)
   try {
@@ -215,20 +233,33 @@ app.post('/cover', requireBearer, async (req, res) => {
     await downloadOneAsset(userId, jobId, 'job.json', path.join(workDir, 'job.json'))
     const manifest = await readJobManifest(workDir)
     const videoPath = path.join(workDir, 'output.mp4')
-    await downloadOneAsset(userId, jobId, 'output.mp4', videoPath)
+    await downloadOneAsset(userId, jobId, 'output.mp4', videoPath).catch(() => {})
 
     let logoPath = null
     if (manifest?.brandLogoUrl) {
       logoPath = await downloadBrandLogo(manifest.brandLogoUrl, workDir).catch(() => null)
     }
-    const finalTitle = (title && String(title).trim())
-      ? String(title).trim()
-      : await generateCoverTitle(manifest?.script || manifest?.description || '', ANTHROPIC_KEY)
 
-    const coverPath = await generateCover({ videoPath, title: finalTitle, format: manifest?.format, logoPath, workDir })
+    // Campos editables. Compatibilidad con el body viejo {title}.
+    let f = (fields && typeof fields === 'object') ? { ...fields } : {}
+    if (!fields && title) f = { title1: String(title).toUpperCase() }
+    if (!f.title1 && !f.title2) {
+      const ai = await generateCoverFields(manifest?.script || manifest?.description || '', ANTHROPIC_KEY)
+      f = { ...ai, ...f }
+    }
+    f.font = f.font || 'anton'
+    f.accentColor = f.accentColor || '#FFE400'
+    const frameIndex = Number.isInteger(f.frameIndex) ? f.frameIndex : 0
+
+    // Frame de fondo elegido (footage real). Si no se baja → fallback al output.
+    let framePath = path.join(workDir, `cover_frame_${frameIndex}.jpg`)
+    const gotFrame = await downloadOneAsset(userId, jobId, `cover_frame_${frameIndex}.jpg`, framePath).then(() => true).catch(() => false)
+    if (!gotFrame) framePath = null
+
+    const coverPath = await generateCover({ framePath, videoPath, format: manifest?.format, logoPath, workDir, fields: f })
     const coverUrl = await uploadAsset(userId, jobId, coverPath, 'cover.png', 'image/png')
-    // Cache-bust: el nombre del objeto es fijo (cover.png), agregamos ?v=ts en el SaaS.
-    res.json({ ok: true, coverUrl, title: finalTitle })
+    const finalTitle = [f.title1, f.title2].filter(Boolean).join(' ')
+    res.json({ ok: true, coverUrl, title: finalTitle, fields: { ...f, frameIndex } })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error(`[cover] regenerate fail jobId=${jobId}: ${msg}`)
@@ -236,6 +267,13 @@ app.post('/cover', requireBearer, async (req, res) => {
   } finally {
     rm(workDir, { recursive: true, force: true }).catch(() => {})
   }
+})
+
+/**
+ * GET /cover-fonts — catálogo de tipografías disponibles para el editor de portada.
+ */
+app.get('/cover-fonts', (_req, res) => {
+  res.json({ fonts: FONT_CATALOG.map(f => ({ key: f.key, label: f.label })) })
 })
 
 app.post('/music-fragments', requireBearer, async (req, res) => {
