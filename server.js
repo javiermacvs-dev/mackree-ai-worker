@@ -6,9 +6,11 @@ import express from 'express'
 import morgan from 'morgan'
 import { rm, mkdir } from 'node:fs/promises'
 import path from 'node:path'
-import { downloadJobAssets, uploadOutput, uploadThumbnail, readJobManifest, downloadOneAsset, uploadAsset, createSignedAssetUrl } from './lib/storage.js'
+import { downloadJobAssets, uploadOutput, uploadThumbnail, readJobManifest, downloadOneAsset, uploadAsset, createSignedAssetUrl, downloadBrandLogo } from './lib/storage.js'
 import { renderJob } from './lib/render.js'
 import { cutFragments } from './lib/music-fragments.js'
+import { generateCover, generateCoverTitle } from './lib/cover.js'
+import { existsSync } from 'node:fs'
 import { postCallback } from './lib/callback.js'
 import { exec } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -19,6 +21,7 @@ const PORT = parseInt(process.env.PORT ?? '8080', 10)
 const WORKER_SECRET = process.env.WORKER_SECRET
 const WORKDIR_ROOT = process.env.RENDER_WORKDIR ?? '/tmp/render-jobs'
 const OPENAI_KEY = process.env.OPENAI_API_KEY ?? ''
+const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY ?? ''   // WS11: título de portada
 
 if (!WORKER_SECRET) {
   console.error('FATAL: WORKER_SECRET is required')
@@ -30,7 +33,7 @@ app.use(express.json({ limit: '1mb' }))
 app.use(morgan('combined'))
 
 // Health probe for Easypanel — `version` lets us confirm a new deploy is live.
-const BUILD_VERSION = 'v64-format-aware-canvas'
+const BUILD_VERSION = 'v65-cover-title'
 app.get('/health', (_req, res) => {
   res.json({ ok: true, version: BUILD_VERSION, ts: new Date().toISOString() })
 })
@@ -85,12 +88,34 @@ async function runRender(jobId, userId) {
       console.warn(`[render] thumbnail failed (non-blocking):`, thumbErr?.message ?? thumbErr)
     }
 
+    // WS11: PORTADA — frame del video + título IA llamativo. La IA propone el título;
+    // el cliente lo puede editar y regenerar vía POST /cover. No bloquea si falla.
+    let coverUrl = null
+    let coverTitle = null
+    try {
+      coverTitle = await generateCoverTitle(manifest?.script || manifest?.description || '', ANTHROPIC_KEY)
+      const logoPath = manifest?.brandLogoUrl ? path.join(workDir, 'logo.png') : null
+      const coverPath = await generateCover({
+        videoPath: outputPath,
+        title: coverTitle,
+        format: manifest?.format,
+        logoPath: logoPath && existsSync(logoPath) ? logoPath : null,
+        workDir,
+      })
+      coverUrl = await uploadAsset(userId, jobId, coverPath, 'cover.png', 'image/png')
+      console.log(`[render] cover uploaded: ${coverUrl} ("${coverTitle}")`)
+    } catch (coverErr) {
+      console.warn(`[render] cover failed (non-blocking):`, coverErr?.message ?? coverErr)
+    }
+
     await postCallback({
       jobId,
       userId,
       status: 'done',
       videoUrl: publicUrl,
       thumbnailUrl: thumbUrl,
+      coverUrl,
+      coverTitle,
       stats,
     })
     console.log(`[render] done jobId=${jobId} url=${publicUrl}`)
@@ -175,6 +200,44 @@ app.post('/render', requireBearer, (req, res) => {
  * durationSec de distintas partes, los sube y devuelve URLs firmadas para que el
  * cliente los ESCUCHE y elija. Síncrono (segundos), fuera de la cola de render.
  */
+/**
+ * POST /cover  (WS11)
+ * Body: { jobId, userId, title? }
+ * Regenera la PORTADA del video con un título editado (o autogenerado si no viene).
+ * Reusa el output.mp4 + el job.json ya en Storage. Síncrono (pocos segundos).
+ */
+app.post('/cover', requireBearer, async (req, res) => {
+  const { jobId, userId, title } = req.body ?? {}
+  if (!jobId || !userId) return res.status(400).json({ error: 'jobId and userId required' })
+  const workDir = path.join(WORKDIR_ROOT, `cover-${jobId}`)
+  try {
+    await mkdir(workDir, { recursive: true })
+    await downloadOneAsset(userId, jobId, 'job.json', path.join(workDir, 'job.json'))
+    const manifest = await readJobManifest(workDir)
+    const videoPath = path.join(workDir, 'output.mp4')
+    await downloadOneAsset(userId, jobId, 'output.mp4', videoPath)
+
+    let logoPath = null
+    if (manifest?.brandLogoUrl) {
+      logoPath = await downloadBrandLogo(manifest.brandLogoUrl, workDir).catch(() => null)
+    }
+    const finalTitle = (title && String(title).trim())
+      ? String(title).trim()
+      : await generateCoverTitle(manifest?.script || manifest?.description || '', ANTHROPIC_KEY)
+
+    const coverPath = await generateCover({ videoPath, title: finalTitle, format: manifest?.format, logoPath, workDir })
+    const coverUrl = await uploadAsset(userId, jobId, coverPath, 'cover.png', 'image/png')
+    // Cache-bust: el nombre del objeto es fijo (cover.png), agregamos ?v=ts en el SaaS.
+    res.json({ ok: true, coverUrl, title: finalTitle })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[cover] regenerate fail jobId=${jobId}: ${msg}`)
+    res.status(500).json({ error: 'cover_failed', detail: msg.slice(0, 300) })
+  } finally {
+    rm(workDir, { recursive: true, force: true }).catch(() => {})
+  }
+})
+
 app.post('/music-fragments', requireBearer, async (req, res) => {
   const { jobId, userId, durationSec } = req.body ?? {}
   if (!jobId || !userId) return res.status(400).json({ error: 'jobId and userId required' })
