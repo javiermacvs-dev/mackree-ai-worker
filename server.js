@@ -7,7 +7,7 @@ import morgan from 'morgan'
 import { rm, mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { downloadJobAssets, uploadOutput, uploadThumbnail, readJobManifest, downloadOneAsset, uploadAsset, createSignedAssetUrl, downloadBrandLogo } from './lib/storage.js'
-import { renderJob } from './lib/render.js'
+import { renderJob, runCaptionsFix } from './lib/render.js'
 import { cutFragments } from './lib/music-fragments.js'
 import { generateCover, generateCoverFields, extractCoverFrames, FONT_CATALOG } from './lib/cover.js'
 import { existsSync } from 'node:fs'
@@ -33,7 +33,7 @@ app.use(express.json({ limit: '1mb' }))
 app.use(morgan('combined'))
 
 // Health probe for Easypanel — `version` lets us confirm a new deploy is live.
-const BUILD_VERSION = 'v72-signed-biometric-urls'
+const BUILD_VERSION = 'v73-captions-only-fix'
 app.get('/health', (_req, res) => {
   res.json({ ok: true, version: BUILD_VERSION, ts: new Date().toISOString() })
 })
@@ -155,20 +155,63 @@ async function runRender(jobId, userId) {
   }
 }
 
+/**
+ * Corrección de SOLO SUBTÍTULOS sobre un video ya renderizado (ver runCaptionsFix
+ * en render.js) — NO rehace voz/ilustraciones/avatar/música. Va por la MISMA cola
+ * que /render (semáforo de 1) porque burnCaptions usa el ancho/alto del módulo
+ * (W/H, mutados por-job) — no es seguro correrlo en paralelo con otro render.
+ */
+async function runCaptionsFixJob(jobId, userId, newReplacements) {
+  const workDir = path.join(WORKDIR_ROOT, `capfix-${jobId}`)
+  try {
+    await mkdir(workDir, { recursive: true })
+    console.log(`[captions-fix] start jobId=${jobId} userId=${userId}`)
+
+    const result = await runCaptionsFix({ workDir, userId, jobId, newReplacements })
+
+    // Thumbnail (mismo patrón que runRender). No bloqueante.
+    let thumbUrl = null
+    try {
+      const thumbPath = `${workDir}/thumbnail.jpg`
+      await execAsync(
+        `ffmpeg -y -ss 1.5 -i "${result.outputPath}" -vframes 1 -vf "scale=540:-2" -q:v 4 "${thumbPath}"`,
+        { timeout: 30_000 },
+      )
+      thumbUrl = await uploadThumbnail(userId, jobId, thumbPath)
+    } catch (thumbErr) {
+      console.warn(`[captions-fix] thumbnail failed (non-blocking):`, thumbErr?.message ?? thumbErr)
+    }
+
+    await postCallback({ jobId, userId, status: 'done', videoUrl: result.publicUrl, thumbnailUrl: thumbUrl, captionReplacements: result.mergedReplacements })
+    console.log(`[captions-fix] done jobId=${jobId}`)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    const errorCode = err?.code === 'no_precaptions_asset' ? 'no_precaptions_asset' : msg
+    console.error(`[captions-fix] fail jobId=${jobId}: ${errorCode}`)
+    await postCallback({ jobId, userId, status: 'failed', error: errorCode })
+  } finally {
+    rm(workDir, { recursive: true, force: true }).catch(() => {})
+  }
+}
+
 // Procesa la cola de a uno. Re-llamado al terminar cada render.
 function pump() {
   if (activeRender) return
   const next = renderQueue.shift()
   if (!next) return
   activeRender = true
-  console.log(`[queue] starting jobId=${next.jobId} (remaining in queue: ${renderQueue.length})`)
+  console.log(`[queue] starting ${next.kind ?? 'render'} jobId=${next.jobId} (remaining in queue: ${renderQueue.length})`)
 
   let timer
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(() => reject(new Error('render_timeout')), RENDER_TIMEOUT_MS)
   })
 
-  Promise.race([runRender(next.jobId, next.userId), timeout])
+  const task = next.kind === 'captions-fix'
+    ? runCaptionsFixJob(next.jobId, next.userId, next.captionReplacements)
+    : runRender(next.jobId, next.userId)
+
+  Promise.race([task, timeout])
     .catch(async (err) => {
       // runRender atrapa sus propios errores; esto captura sobre todo el timeout,
       // que libera el slot aunque un render quede colgado (los ffmpeg internos
@@ -206,6 +249,27 @@ app.post('/render', requireBearer, (req, res) => {
   renderQueue.push({ jobId, userId })
   const position = renderQueue.length + (activeRender ? 1 : 0)
   console.log(`[queue] enqueued jobId=${jobId} (position ${position}, active=${activeRender})`)
+  res.status(202).json({ accepted: true, jobId, queued: true, position })
+  pump()
+})
+
+/**
+ * POST /captions-fix
+ * Body: { jobId, userId, captionReplacements: [{from,to}] }
+ * Corrige SOLO los subtítulos de un video YA renderizado — no vuelve a generar
+ * voz/ilustraciones/avatar/música. Responde 202 y ENCOLA (misma cola que /render,
+ * ver runCaptionsFixJob). Si el job es de antes de esta función (no tiene
+ * precaptions.mp4) falla con error 'no_precaptions_asset' vía el callback — el
+ * SaaS cae a un render completo en ese caso.
+ */
+app.post('/captions-fix', requireBearer, (req, res) => {
+  const { jobId, userId, captionReplacements } = req.body ?? {}
+  if (!jobId || !userId) {
+    return res.status(400).json({ error: 'jobId and userId required' })
+  }
+  renderQueue.push({ kind: 'captions-fix', jobId, userId, captionReplacements })
+  const position = renderQueue.length + (activeRender ? 1 : 0)
+  console.log(`[queue] enqueued captions-fix jobId=${jobId} (position ${position}, active=${activeRender})`)
   res.status(202).json({ accepted: true, jobId, queued: true, position })
   pump()
 })
