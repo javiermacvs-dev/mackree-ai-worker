@@ -33,7 +33,7 @@ app.use(express.json({ limit: '1mb' }))
 app.use(morgan('combined'))
 
 // Health probe for Easypanel — `version` lets us confirm a new deploy is live.
-const BUILD_VERSION = 'v71-avatar-clone'
+const BUILD_VERSION = 'v72-signed-biometric-urls'
 app.get('/health', (_req, res) => {
   res.json({ ok: true, version: BUILD_VERSION, ts: new Date().toISOString() })
 })
