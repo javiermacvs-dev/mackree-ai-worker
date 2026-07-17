@@ -33,7 +33,7 @@ app.use(express.json({ limit: '1mb' }))
 app.use(morgan('combined'))
 
 // Health probe for Easypanel — `version` lets us confirm a new deploy is live.
-const BUILD_VERSION = 'v73-captions-only-fix'
+const BUILD_VERSION = 'v74-embed-cover-mp4'
 app.get('/health', (_req, res) => {
   res.json({ ok: true, version: BUILD_VERSION, ts: new Date().toISOString() })
 })
@@ -58,6 +58,37 @@ const RENDER_TIMEOUT_MS = parseInt(process.env.RENDER_TIMEOUT_MS ?? '1500000', 1
 let activeRender = false
 const renderQueue = []
 
+/**
+ * Embebe la PORTADA (cover) dentro del MP4 como carátula (`attached_pic`) para que
+ * los reproductores y apps (galería del teléfono, WhatsApp, QuickTime/Finder, VLC)
+ * muestren esa imagen cuando el video está sin reproducir — el equivalente en el
+ * ARCHIVO a lo que el atributo `poster` hace en la web. Re-muxea con `-c copy`
+ * (NO re-encodea el video → rápido y sin pérdida de calidad). Devuelve la ruta del
+ * nuevo MP4, o `null` si algo falla (el caller conserva el output.mp4 original →
+ * cero regresión). Nota: Instagram/TikTok generan su propia miniatura al subir;
+ * esto cubre previews de archivo/chat/galería, no el picker de esas plataformas.
+ */
+async function embedCoverIntoMp4(videoPath, coverPngPath, workDir) {
+  try {
+    if (!existsSync(videoPath) || !existsSync(coverPngPath)) return null
+    // La carátula va como JPEG (mjpeg) — el formato de cover art más compatible
+    // dentro del contenedor MP4.
+    const coverJpg = path.join(workDir, 'cover_embed.jpg')
+    await execAsync(`ffmpeg -y -i "${coverPngPath}" -q:v 2 "${coverJpg}"`, { timeout: 30_000 })
+    const outPath = path.join(workDir, 'output_cover.mp4')
+    // -map 0 (video+audio) + -map 1 (la portada) · -c copy (sin re-encode) ·
+    // -disposition:v:1 attached_pic marca el 2º stream de video como carátula.
+    await execAsync(
+      `ffmpeg -y -i "${videoPath}" -i "${coverJpg}" -map 0 -map 1 -c copy -disposition:v:1 attached_pic "${outPath}"`,
+      { timeout: 120_000 },
+    )
+    return existsSync(outPath) ? outPath : null
+  } catch (e) {
+    console.warn(`[cover-embed] failed (non-blocking):`, e?.message ?? e)
+    return null
+  }
+}
+
 async function runRender(jobId, userId) {
   const workDir = path.join(WORKDIR_ROOT, jobId)
   try {
@@ -71,7 +102,7 @@ async function runRender(jobId, userId) {
     const renderResult = await renderJob({ workDir, openaiKey: OPENAI_KEY, manifest })
     const outputPath = renderResult.outputPath ?? renderResult  // back-compat
     const stats = renderResult.stats ?? null
-    const publicUrl = await uploadOutput(userId, jobId, outputPath, 'output.mp4')
+    let publicUrl = await uploadOutput(userId, jobId, outputPath, 'output.mp4')
 
     // Thumbnail: extraer frame en t=1.5s (después del intro del clip).
     // No bloquea si falla — el render principal ya es exitoso.
@@ -119,6 +150,13 @@ async function runRender(jobId, userId) {
       coverUrl = await uploadAsset(userId, jobId, coverPath, 'cover.png', 'image/png')
       coverTitle = [coverFields.title1, coverFields.title2].filter(Boolean).join(' ')
       console.log(`[render] cover uploaded: ${coverUrl} (${coverFrames.length} frames, "${coverTitle}")`)
+      // Nivel 2: embeber la portada en el propio MP4 (carátula del archivo) y
+      // re-subir. Si falla, se conserva el output.mp4 ya subido (sin carátula).
+      const embedded = await embedCoverIntoMp4(outputPath, coverPath, workDir)
+      if (embedded) {
+        publicUrl = await uploadOutput(userId, jobId, embedded, 'output.mp4')
+        console.log(`[render] cover embedded into output.mp4`)
+      }
     } catch (coverErr) {
       console.warn(`[render] cover failed (non-blocking):`, coverErr?.message ?? coverErr)
     }
@@ -322,6 +360,14 @@ app.post('/cover', requireBearer, async (req, res) => {
 
     const coverPath = await generateCover({ framePath, videoPath, format: manifest?.format, logoPath, workDir, fields: f })
     const coverUrl = await uploadAsset(userId, jobId, coverPath, 'cover.png', 'image/png')
+    // Nivel 2: re-embeber la portada editada como carátula del output.mp4 (no
+    // bloquea la portada si falla — videoPath puede no haberse bajado).
+    try {
+      const embedded = await embedCoverIntoMp4(videoPath, coverPath, workDir)
+      if (embedded) await uploadOutput(userId, jobId, embedded, 'output.mp4')
+    } catch (e) {
+      console.warn(`[cover] embed into mp4 failed (non-blocking):`, e?.message ?? e)
+    }
     const finalTitle = [f.title1, f.title2].filter(Boolean).join(' ')
     res.json({ ok: true, coverUrl, title: finalTitle, fields: { ...f, frameIndex } })
   } catch (err) {
