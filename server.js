@@ -14,6 +14,7 @@ import { existsSync } from 'node:fs'
 import { postCallback } from './lib/callback.js'
 import { exec } from 'node:child_process'
 import { promisify } from 'node:util'
+import crypto from 'node:crypto'
 
 const execAsync = promisify(exec)
 
@@ -29,20 +30,29 @@ if (!WORKER_SECRET) {
 }
 
 const app = express()
+app.disable('x-powered-by')  // CN-013: no anunciar Express
 app.use(express.json({ limit: '1mb' }))
-app.use(morgan('combined'))
+app.use(morgan('combined'))  // el formato 'combined' NO incluye el header Authorization
 
 // Health probe for Easypanel — `version` lets us confirm a new deploy is live.
-const BUILD_VERSION = 'v77-music-retry-cover-positions'
+const BUILD_VERSION = 'v78-security-hardening'
 app.get('/health', (_req, res) => {
   res.json({ ok: true, version: BUILD_VERSION, ts: new Date().toISOString() })
 })
 
-// Bearer-auth guard for /render
+// Bearer-auth guard for /render.
+// CN-009: comparación en tiempo CONSTANTE (crypto.timingSafeEqual) para no filtrar el
+// secreto por timing. Guarda de longitud previa (timingSafeEqual exige buffers iguales).
+function safeEqual(a, b) {
+  const ba = Buffer.from(String(a), 'utf8')
+  const bb = Buffer.from(String(b), 'utf8')
+  if (ba.length !== bb.length) return false
+  return crypto.timingSafeEqual(ba, bb)
+}
 function requireBearer(req, res, next) {
   const header = req.headers.authorization ?? ''
   const token = header.startsWith('Bearer ') ? header.slice(7) : ''
-  if (token !== WORKER_SECRET) {
+  if (!token || !safeEqual(token, WORKER_SECRET)) {
     return res.status(401).json({ error: 'unauthorized' })
   }
   next()

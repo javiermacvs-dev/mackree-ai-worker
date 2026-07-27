@@ -94,6 +94,10 @@ Si dudás → asumí técnico/inamovible. Es más fácil agregar toggle después
 
 > Estas decisiones **JAMÁS se reabren ni se revierten sin pedido explícito de Javier.** Si una nueva sesión de Claude está por modificar alguna de estas líneas → **DETENERSE y leer este archivo primero.** El problema operativo que motivó esta sección: en sesiones previas se perdieron ajustes aprobados al cerrar/abrir sesión, lo que provocó retrocesos (Javier: "hacemos 3 pasos adelante y volvemos 2, perdemos tiempo y crédito").
 
+### 0. 🔒 SEGURIDAD — `contact-illustration.js` NUNCA vuelve a `exec`/shell con datos de usuario (CN-001)
+
+**v78 (2026-07-26, auditoría Cyber Neo).** El texto de contacto (teléfono/web/correo, controlado por el usuario) se compone en un comando ffmpeg. Antes iba por `exec` (=/bin/sh -c) → **command injection / RCE** confirmada (`website_url = x"$(cmd)".com` ejecutaba `cmd` en el worker con todas las keys en el entorno). Fix INAMOVIBLE: **`execFile('ffmpeg', [args])` SIN shell** + `safeText` con **whitelist estricta** (`[^A-Za-z0-9 @.+\-_/()]` → fuera, tope 80). **NUNCA volver a `exec`/`execSync`/template-string-a-shell con datos de usuario en este archivo.** El SaaS además sanea en la frontera (`src/lib/contact.ts` en `brand/rules` + `brand/save`). Otros `execAsync` del worker usan solo rutas server-generadas (media_NN/workDir) → no son inyectables, no tocar. Además v78: Bearer con `crypto.timingSafeEqual` (CN-009), `app.disable('x-powered-by')`, guard SSRF en `downloadBrandLogo` (`isSafePublicUrl`, bloquea IPs privadas/metadata — CN-003), Dockerfile con `USER app` no-root + `npm ci` (CN-004/CN-014). Reporte completo: `~/Desktop/cyber-neo-report-chixy-2026-07-26.md`.
+
 ### 1. Denoise del audio — `afftdn` solo SUBE, jamás baja
 
 **Trayectoria histórica (git log):**
@@ -483,7 +487,7 @@ El trigger del pass 3 está hard-coded a `style === 'commercial'` por compat con
 | Audio chain (edit mode) | `aresample=44100 → highpass=100 → afftdn=nr=50 → dynaudnorm → format` por clip; después concat → `loudnorm I=-16:LRA=11:TP=-1.5` → mix con música → `alimiter=limit=0.95` |
 | Video chain (edit mode) | `setpts → scale → crop → fps → setsar → deshake (si motion>1) → unsharp → eq → format` |
 | Captions | Whisper word-level → ASS karaoke con `Impact 76px`, color verde limón `&H0000FF80` |
-| Build version | leer `BUILD_VERSION` en `server.js` (código: `v77-music-retry-cover-positions`). ⚠️ **producción puede seguir en `v76`** si Easypanel no reinició tras el push — verificar SIEMPRE con `/health`, no confiar en el verde (error #17) |
+| Build version | leer `BUILD_VERSION` en `server.js` (código: `v78-security-hardening`). ⚠️ **producción puede seguir en la versión anterior** si Easypanel no reinició tras el push — verificar SIEMPRE con `/health`, no confiar en el verde (error #17) |
 
 ---
 
