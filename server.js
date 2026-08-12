@@ -35,7 +35,7 @@ app.use(express.json({ limit: '1mb' }))
 app.use(morgan('combined'))  // el formato 'combined' NO incluye el header Authorization
 
 // Health probe for Easypanel — `version` lets us confirm a new deploy is live.
-const BUILD_VERSION = 'v78-security-hardening'
+const BUILD_VERSION = 'v79-subtitle-position'
 app.get('/health', (_req, res) => {
   res.json({ ok: true, version: BUILD_VERSION, ts: new Date().toISOString() })
 })
@@ -209,13 +209,13 @@ async function runRender(jobId, userId) {
  * que /render (semáforo de 1) porque burnCaptions usa el ancho/alto del módulo
  * (W/H, mutados por-job) — no es seguro correrlo en paralelo con otro render.
  */
-async function runCaptionsFixJob(jobId, userId, newReplacements) {
+async function runCaptionsFixJob(jobId, userId, newReplacements, subtitlePosition) {
   const workDir = path.join(WORKDIR_ROOT, `capfix-${jobId}`)
   try {
     await mkdir(workDir, { recursive: true })
     console.log(`[captions-fix] start jobId=${jobId} userId=${userId}`)
 
-    const result = await runCaptionsFix({ workDir, userId, jobId, newReplacements })
+    const result = await runCaptionsFix({ workDir, userId, jobId, newReplacements, subtitlePosition })
 
     // Thumbnail (mismo patrón que runRender). No bloqueante.
     let thumbUrl = null
@@ -256,7 +256,7 @@ function pump() {
   })
 
   const task = next.kind === 'captions-fix'
-    ? runCaptionsFixJob(next.jobId, next.userId, next.captionReplacements)
+    ? runCaptionsFixJob(next.jobId, next.userId, next.captionReplacements, next.subtitlePosition)
     : runRender(next.jobId, next.userId)
 
   Promise.race([task, timeout])
@@ -311,11 +311,11 @@ app.post('/render', requireBearer, (req, res) => {
  * SaaS cae a un render completo en ese caso.
  */
 app.post('/captions-fix', requireBearer, (req, res) => {
-  const { jobId, userId, captionReplacements } = req.body ?? {}
+  const { jobId, userId, captionReplacements, subtitlePosition } = req.body ?? {}
   if (!jobId || !userId) {
     return res.status(400).json({ error: 'jobId and userId required' })
   }
-  renderQueue.push({ kind: 'captions-fix', jobId, userId, captionReplacements })
+  renderQueue.push({ kind: 'captions-fix', jobId, userId, captionReplacements, subtitlePosition })
   const position = renderQueue.length + (activeRender ? 1 : 0)
   console.log(`[queue] enqueued captions-fix jobId=${jobId} (position ${position}, active=${activeRender})`)
   res.status(202).json({ accepted: true, jobId, queued: true, position })
