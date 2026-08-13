@@ -35,7 +35,7 @@ app.use(express.json({ limit: '1mb' }))
 app.use(morgan('combined'))  // el formato 'combined' NO incluye el header Authorization
 
 // Health probe for Easypanel — `version` lets us confirm a new deploy is live.
-const BUILD_VERSION = 'v79-subtitle-position'
+const BUILD_VERSION = 'v80-duck-energy-gate'
 app.get('/health', (_req, res) => {
   res.json({ ok: true, version: BUILD_VERSION, ts: new Date().toISOString() })
 })
