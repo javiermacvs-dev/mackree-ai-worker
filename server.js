@@ -6,7 +6,7 @@ import express from 'express'
 import morgan from 'morgan'
 import { rm, mkdir } from 'node:fs/promises'
 import path from 'node:path'
-import { downloadJobAssets, uploadOutput, uploadThumbnail, readJobManifest, downloadOneAsset, uploadAsset, createSignedAssetUrl, downloadBrandLogo } from './lib/storage.js'
+import { downloadJobAssets, uploadOutput, uploadThumbnail, readJobManifest, downloadOneAsset, uploadAsset, createSignedAssetUrl, downloadBrandLogo, r2Enabled } from './lib/storage.js'
 import { renderJob, runCaptionsFix } from './lib/render.js'
 import { cutFragments } from './lib/music-fragments.js'
 import { generateCover, generateCoverFields, extractCoverFrames, FONT_CATALOG } from './lib/cover.js'
@@ -35,9 +35,10 @@ app.use(express.json({ limit: '1mb' }))
 app.use(morgan('combined'))  // el formato 'combined' NO incluye el header Authorization
 
 // Health probe for Easypanel — `version` lets us confirm a new deploy is live.
-const BUILD_VERSION = 'v81-r2-dual-storage'
+const BUILD_VERSION = 'v81b-r2-health-flag'
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, version: BUILD_VERSION, ts: new Date().toISOString() })
+  // r2: true = las vars R2_* están cargadas y el storage dual escribe en R2.
+  res.json({ ok: true, version: BUILD_VERSION, r2: r2Enabled(), ts: new Date().toISOString() })
 })
 
 // Bearer-auth guard for /render.
