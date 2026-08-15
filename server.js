@@ -35,7 +35,7 @@ app.use(express.json({ limit: '1mb' }))
 app.use(morgan('combined'))  // el formato 'combined' NO incluye el header Authorization
 
 // Health probe for Easypanel — `version` lets us confirm a new deploy is live.
-const BUILD_VERSION = 'v83-weighted-media-slots'
+const BUILD_VERSION = 'v84-faststart-cover-remux'
 app.get('/health', (_req, res) => {
   // r2: true = las vars R2_* están cargadas y el storage dual escribe en R2.
   res.json({ ok: true, version: BUILD_VERSION, r2: r2Enabled(), ts: new Date().toISOString() })
@@ -89,8 +89,12 @@ async function embedCoverIntoMp4(videoPath, coverPngPath, workDir) {
     const outPath = path.join(workDir, 'output_cover.mp4')
     // -map 0 (video+audio) + -map 1 (la portada) · -c copy (sin re-encode) ·
     // -disposition:v:1 attached_pic marca el 2º stream de video como carátula.
+    // ⛔ -movflags +faststart es OBLIGATORIO (bug 2026-08-15): este re-mux NO
+    // hereda el faststart del render → el índice (moov) quedaba AL FINAL del
+    // archivo y el navegador tenía que descargar el MP4 ENTERO antes de mostrar
+    // un frame ("el video no carga" en el teléfono). Ver inamovible #35.
     await execAsync(
-      `ffmpeg -y -i "${videoPath}" -i "${coverJpg}" -map 0 -map 1 -c copy -disposition:v:1 attached_pic "${outPath}"`,
+      `ffmpeg -y -i "${videoPath}" -i "${coverJpg}" -map 0 -map 1 -c copy -disposition:v:1 attached_pic -movflags +faststart "${outPath}"`,
       { timeout: 120_000 },
     )
     return existsSync(outPath) ? outPath : null
