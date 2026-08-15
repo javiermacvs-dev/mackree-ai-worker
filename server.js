@@ -35,7 +35,7 @@ app.use(express.json({ limit: '1mb' }))
 app.use(morgan('combined'))  // el formato 'combined' NO incluye el header Authorization
 
 // Health probe for Easypanel — `version` lets us confirm a new deploy is live.
-const BUILD_VERSION = 'v82-r2-via-request'
+const BUILD_VERSION = 'v83-weighted-media-slots'
 app.get('/health', (_req, res) => {
   // r2: true = las vars R2_* están cargadas y el storage dual escribe en R2.
   res.json({ ok: true, version: BUILD_VERSION, r2: r2Enabled(), ts: new Date().toISOString() })
