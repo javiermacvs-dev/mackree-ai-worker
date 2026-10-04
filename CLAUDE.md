@@ -512,3 +512,9 @@ curl https://worker-mackree-ai.kqlrkv.easypanel.host/health
 ```
 
 Si `version` no cambió tras 5 min → forzar redeploy manual desde el panel de Easypanel.
+
+---
+
+## v87 (2026-10-04) — Cola sin duplicados (`v87-dedupe-render-queue`, LIVE)
+
+Javier: *"no está sirviendo Chixy, intenté dos veces desde mi cel"*. Job `mumr5k8ljxq5z9x9qvi` (29-sep, Freightliner + dumpster): el video **sí se renderizó** (output.mp4 28.5 MB, portada OK) pero quedó en `failed` con `ENOENT … cover.png`. **Causa:** el `/render` llegó **dos veces** para el mismo jobId; el 1º terminó y mandó `done` (14:23:52), su `rm` del workDir era fire-and-forget, el 2º arrancó en la misma carpeta, falló a 1 s y su callback `failed` **pisó** el `done`. **Fix:** `/render` y `/captions-fix` ignoran un jobId ya activo o en cola (`activeJobId` + búsqueda en `renderQueue`, responden 202 `duplicate:true`); `runRender` hace `await rm(...)` antes de soltar la cola. Job restaurado a `done` en la DB con OK de Javier. **Pendiente (SaaS):** que el webhook `render-complete` no deje que un `failed` pise un `done` con video, y que `/api/generate/render` no re-despache un job ya `rendering`.
