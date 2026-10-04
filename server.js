@@ -35,7 +35,7 @@ app.use(express.json({ limit: '1mb' }))
 app.use(morgan('combined'))  // el formato 'combined' NO incluye el header Authorization
 
 // Health probe for Easypanel — `version` lets us confirm a new deploy is live.
-const BUILD_VERSION = 'v86-openai-fallback'
+const BUILD_VERSION = 'v87-dedupe-render-queue'
 app.get('/health', (_req, res) => {
   // r2: true = las vars R2_* están cargadas y el storage dual escribe en R2.
   res.json({ ok: true, version: BUILD_VERSION, r2: r2Enabled(), ts: new Date().toISOString() })
@@ -67,6 +67,7 @@ function requireBearer(req, res, next) {
 // con varios workers): ver mackree-ai-worker/CLAUDE.md → Errores #1.
 const RENDER_TIMEOUT_MS = parseInt(process.env.RENDER_TIMEOUT_MS ?? '1500000', 10) // 25 min
 let activeRender = false
+let activeJobId = null   // v87: para descartar encolados duplicados del mismo job
 const renderQueue = []
 
 /**
@@ -203,8 +204,10 @@ async function runRender(jobId, userId) {
       error: (msg + (stderr ? ' | stderr: ' + stderr.slice(-400) : '')).slice(0, 1500),
     })
   } finally {
-    // Clean tmpfs regardless of outcome — output is already in Supabase
-    rm(workDir, { recursive: true, force: true }).catch(() => {})
+    // Clean tmpfs regardless of outcome — output is already in Supabase.
+    // v87: AWAIT — antes era fire-and-forget y el siguiente job de la cola podía
+    // arrancar mientras esta carpeta todavía se estaba borrando.
+    await rm(workDir, { recursive: true, force: true }).catch(() => {})
   }
 }
 
@@ -253,6 +256,7 @@ function pump() {
   const next = renderQueue.shift()
   if (!next) return
   activeRender = true
+  activeJobId = next.jobId
   console.log(`[queue] starting ${next.kind ?? 'render'} jobId=${next.jobId} (remaining in queue: ${renderQueue.length})`)
 
   let timer
@@ -284,6 +288,7 @@ function pump() {
     .finally(() => {
       clearTimeout(timer)
       activeRender = false
+      activeJobId = null
       pump() // siguiente de la fila
     })
 }
@@ -300,6 +305,13 @@ app.post('/render', requireBearer, (req, res) => {
     return res.status(400).json({ error: 'jobId and userId required' })
   }
   setR2Config(r2)   // config R2 transitoria enviada por el SaaS (v82)
+  // v87: un mismo jobId NO se encola dos veces (doble toque / reintento del SaaS).
+  // Bug 2026-09-29 (job mumr5k8…): el 2º render arrancaba en la carpeta que el 1º
+  // estaba borrando → fallaba con ENOENT y su callback 'failed' pisaba el 'done'.
+  if (activeJobId === jobId || renderQueue.some(q => q.jobId === jobId)) {
+    console.log(`[queue] duplicate jobId=${jobId} ignored (already active/queued)`)
+    return res.status(202).json({ accepted: true, jobId, queued: true, duplicate: true })
+  }
   renderQueue.push({ jobId, userId })
   const position = renderQueue.length + (activeRender ? 1 : 0)
   console.log(`[queue] enqueued jobId=${jobId} (position ${position}, active=${activeRender})`)
@@ -322,6 +334,10 @@ app.post('/captions-fix', requireBearer, (req, res) => {
     return res.status(400).json({ error: 'jobId and userId required' })
   }
   setR2Config(r2)
+  if (activeJobId === jobId || renderQueue.some(q => q.jobId === jobId)) {
+    console.log(`[queue] duplicate captions-fix jobId=${jobId} ignored (already active/queued)`)
+    return res.status(202).json({ accepted: true, jobId, queued: true, duplicate: true })
+  }
   renderQueue.push({ kind: 'captions-fix', jobId, userId, captionReplacements, subtitlePosition })
   const position = renderQueue.length + (activeRender ? 1 : 0)
   console.log(`[queue] enqueued captions-fix jobId=${jobId} (position ${position}, active=${activeRender})`)
