@@ -531,3 +531,7 @@ Salió del render local de validación del job `mumr5k8ljxq5z9x9qvi` (Freightlin
 - **SFX en Windows:** la ruta del catálogo usaba `new URL().pathname` y fallaba en local; ahora usa `fileURLToPath`, igual que `llm-sfx.js`.
 
 **Pendiente de Javier:** (a) su opinión sobre `EDIT_VIDEO/renders-locales/freightliner_dumpster_v88.mp4` (render local sin dibujos IA); (b) decidir si los dibujos IA se apagan solos cuando el cliente sube bastante material propio (en ese video tapaban sus fotos con un camión turquesa inventado).
+
+## v90 (2026-10-07) — Portada en el MISMO idioma del guion (`v90-cover-same-language`)
+
+Javier sobre el job `mumr5k8ljxq5z9x9qvi`: voz y subtítulos en inglés, títulos en español. Los títulos de impacto ya los había arreglado v89 (ese video era del 29-sep, anterior). Faltaba la **portada**: `generateCoverFields` tenía el prompt en español sin regla de idioma → portada en español sobre un video en inglés. Ahora `detectTextLang(text)` (conteo de palabras comunes EN vs ES) le dice al modelo el idioma del guion y le prohíbe traducir; el texto de respaldo sin IA también sale en el idioma correcto (`WATCH THIS` / `MIRÁ ESTO`). **Regla general: todo texto que el worker escriba sobre el video (subtítulos, títulos, portada) va en el idioma de la voz.**
